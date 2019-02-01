@@ -50,17 +50,24 @@ def fake_rm_file(argv):
 #the path_n is the folder that file will be moved to 
 def mv_file_folder(name_n,trash_day_folder):
     if  os.path.isdir(name_n):
+        name_n=name_n.strip("/")
 	#move file to the trash folder
 	#check if there is file which has the same name with the file to be removed
 	if os.path.exists(os.path.join(trash_day_folder,name_n)):
             name_new=name_n+"1"
-            os.rename(name_n,name_new)
+            #get the current directory
+            #current_dir=os.getcwd()
+            #old_path_file=current_dir+"/"+name_n
+            #new_file_path=current_dir
+            #shutil.move(old_path_file,new_file_path)
+            os.system("mv %s %s"%(name_n,name_new))
+            #os.rename(name_n,name_new)
 	    #shutil.move(name_n,os.path.join(trash_day_folder,name_new))
             
             mv_file_folder(name_n+"1",trash_day_folder)
         elif not os.path.exists(os.path.join(trash_day_folder,name_n)):
 	    shutil.copytree(name_n,os.path.join(trash_day_folder,name_n))
-	    os.rmdir(name_n)
+	    os.system("rm -r %s"%name_n)
 	    print "folder:",name_n," will be deleted"
     #if the name_n is a file,just copy it to the trash folder of today
     elif os.path.isfile(name_n):
