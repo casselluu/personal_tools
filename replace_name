@@ -1,0 +1,83 @@
+#!/usr/local/bin/python
+#coding=utf-8
+##########################################################################################################
+##########################################################################################################
+#该程序后面应指定的参数是：路径，需要替换的字符，替换后的字符
+#参数的英文名分别为：--path,--old,--new
+
+
+
+
+
+
+import os,re
+#定义一个function，该function的功能是通过给定的文件夹，将文件夹中特定的字符特换成指定的字符
+#输入参数：文件路径，被替换的字符，用来替换的字符
+#输出结果：将文件夹中含有指定字符的文件名中的字符替换为指定的字符
+def replace_char_name(path_n,char_old,char_new):
+    #转换工作目录
+    os.chdir(path_n)
+    #获取文件夹中所有的文件的名字
+    all_files=os.listdir(path_n)
+    #对每一个文件进行遍历
+    for file_n in all_files:
+        print file_n
+        #检查这个文件是不是文件
+        if os.path.isfile(file_n):
+            #将字符全部转化为大写，这样避免大小写的不同导致运行错误
+            #old_upper=char_old
+            #new_upper=char_new
+            #判断文件名称中是否含有需要替换的字符
+            match_n=re.search(char_old,file_n,re.I)
+            #判断是否匹配成功
+            if match_n:
+                #替换名称中的字符
+                new_name=file_n[:match_n.start(0)]+char_new+file_n[match_n.end(0):]
+                #对文件进行重命名
+                os.rename(file_n,new_name)
+
+if __name__=="__main__":
+    from sys import argv
+    #预定义一个空字典，用来储存所有的
+    para={}
+    #程序后方给定的参数
+    for i in xrange(len(argv[1:])):
+        #获取当前的字符
+        char_n=argv[i+1]
+        #假如字符中含有“-”那么就那么作为键，其后的字符作为值
+        if char_n.find("-")!=-1:
+            #将参数储存在字典中
+            para[char_n.strip("-")]=argv[i+2]
+    print para
+    #获取path_name
+    path_n=para["path"]
+    #获取旧字符
+    old_char=para["old"]
+    #获取新字符
+    new_char=para["new"]
+    #接下来利用获取到的参数进行分析
+    replace_char_name(path_n,old_char,new_char)
+     
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
