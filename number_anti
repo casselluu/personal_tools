@@ -1,0 +1,113 @@
+#/usr/local/bin/python
+#coding=utf-8
+#导入需要的文件
+from hmmer_parser import *
+import os
+
+
+#定义一个function，该function的功能是通过给定的氨基酸序列进行hmm分析
+#输入参数：氨基酸序列
+#输出结果：注释的状态
+def hmm_analysis_seq(aa_seq):
+    ######创建一个文件夹用来单独对氨基酸序列进行分析
+    ##首先获取当前文件夹的绝对路径
+    path_now=os.getcwd()
+    ##然后在当前文件夹下新建一个文件夹用于氨基酸序列的分析
+    process_folder=os.path.join(path_now,"single_aa_process")
+    #创建文件夹
+    mkdir_folder(process_folder)
+    #转换到process_folder工作目录(保证新建的文件在这个文件夹中)
+    os.chdir(process_folder)
+    #将这个氨基酸序列写到文件中
+    aa_seq_file=open("seq_file_to_annotate.fasta","w")
+    #将氨基酸序列写到文件中(保存为fasta文件)
+    aa_seq_file.write(">"+"sequence_to_be_processed"+"\n"+aa_seq+"\n")
+    #关闭文件
+    aa_seq_file.close()
+    ########################对其进行hmmscan分析###############################
+    #首先将ALL.hmm相关的文件拷贝到这个文件夹中，这样才能进行hmm分析
+    hmm_folder=r"/home/fanxuezhe/files/hmm_library/all_hmm"
+    type_char="ALL.hmm"
+    mkdir="F"
+    cp_all_file(hmm_folder,process_folder,type_char,mkdir)
+    #接下来进行hmmscan分析
+    os.chdir(process_folder)
+    os.system("hmmscan -o hmmscan_out.txt ALL.hmm seq_file_to_annotate.fasta")
+    #对分析后的输出文件进行解析
+    #定义输出的文件名变量
+    hmmscan_out="hmmscan_out.txt"
+    print os.getcwd()
+    print os.listdir(".")
+    #接下来对输出文件进行解析
+    parse_result=hmmer_parse(process_folder,hmmscan_out)
+    #利用定义的模块分析这个分析得到的结果
+    info_dict=get_info_from_hmmer_handle(parse_result)
+    print info_dict
+
+#定以一个function,该function的功能是通过给定的hmmscan数据文件的解析文件，将其hmm_start,hmm_end,query_start,query_end,匹配状态等参数信息返回
+#输入参数：hmmer_parse解析hmmscan输出的结果返回的数据
+#返回结果：一个含有 信息的列表
+def get_info_from_hmmer_handle(hmmer_parse):
+    #预定义字典获取从hmmer_parse中获得的信息
+    info_dict={}
+    #预定义query_id
+    query_id=""
+    #利用for循环从hmmer_parse中获取信息
+    #每个annotation都是一个序列的hmmscan分析的所有注释信息
+    for annotations in hmmer_parse:
+        #预定义一个列表将来储存单个结构域的注释信息
+        anno_domain_part=[]
+        #接下来利用e-value的值来空值取出e-value值最小的
+        #预设定一个evalue值
+        evalue=1
+        #利用for循环获取annotations中的hsp的信息
+        for hsp in annotations.hsps:
+            #获取当前hsp的evalue
+            evalue_n=hsp.evalue
+            #判断当前的evalue是否比预先设定的值小，小的话则获取其中的信息，否则表示这个序列是有问题的
+            if evalue_n<evalue:
+                #替换evalue为较小的值
+                evalue=evalue_n
+                #获取query_id
+                query_id=hsp.query_id
+                #获取hmm_start
+                hmm_start=hsp.hit_start
+                #获取hmm_end
+                hmm_end=hsp.hit_end
+                #获取query_start
+                query_start=hsp.query_start
+                #获取query_end
+                query_end=hsp.query_end
+                #获取匹配状态的字符
+                reference_string=hsp.aln_annotation["RF"]
+                state_string=hsp.aln_annotation["PP"]
+        #将获取到的信息放在字典中
+        info_dict[query_id]=[query_id,evalue,hmm_start,hmm_end,query_start,query_end,reference_string,state_string]
+    #返回获取到的数据
+    return info_dict
+
+
+
+#定义一个function，该function的功能是通过给定的氨基酸序列和hmm输出的匹配状态以及IMGT和其他编号系统之间的对应关系字符进行编号
+#给定的参数：氨基酸序列（字符）
+#输出的结果：
+
+def number_imgt(aa_sequence,hmm_out,corresponding_char):
+    #首先根据
+    pass
+
+if __name__=="__main__":
+    #导入argv模块
+    from sys import argv
+    #获取程序后边给出的参数并且储存在字典中
+    para_dict=para_to_dict(argv[1:])
+    #首先检查给定的是序列还是文件
+    #假如给定的是文件
+    #if para_dict["file"]:
+    #假如给定的是序列
+    if not para_dict.has_key("file") and para_dict.has_key("seq"):
+        #对序列进行分析
+        hmm_analysis_seq(para_dict["seq"]) 
+        #
+        
+
