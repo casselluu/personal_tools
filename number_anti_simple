@@ -1,0 +1,533 @@
+#!/usr/local/bin/python
+#coding=utf-8
+
+"""
+这个程序主要是对给定的抗体序列进行简单的编号
+"""
+
+#导入hmmer_parser中的模块
+from hmmer_parser import *
+import argparse,os,tempfile
+#定义一个function，该function的功能是利用给定的氨基酸序列获得给定的scheme的框架区和CDR区
+#输入参数：氨基酸序列
+#输出结果：各个框架区的列表
+def divide_region(sequence,scheme):
+    #首先新建一个虚拟的文件
+    fasta_filehandle,fasta_filename=tempfile.mkstemp(".fasta",text=True)
+    #接下来将序列写入文件
+    with os.fdopen(fasta_filehandle,"w") as outfile:
+        #将序列写入文件
+        outfile.write(">sequence"+"\n"+sequence+"\n")
+    #定义输出文件（txt格式）
+    output_handle,output_filename=tempfile.mkstemp(".txt",text=True)
+    
+    #定义hmm所在的路径
+    hmm_path=r"/home/fanxuezhe/files/hmm_library/all_hmm/ALL.hmm"
+    try:
+        #执行hmmscan命令得到输出文件，之后利用自己定义得模块进行分析
+        os.system("hmmscan -o %s %s %s"%(output_filename,hmm_path,fasta_filename))
+        ##############对输出的结果进行解析##################
+        #首先确定当前文件夹的绝对路径
+        cur_dir=os.getcwd()
+        #接下来确定txt文件和fasta文件的配对名称
+        pair_file={output_filename:fasta_filename}
+        #定义要分析的sheme
+        #scheme="IMGT"
+        #接下来提取对应的框架和CDR
+        total_data=return_seq_domain(cur_dir,pair_file,scheme)
+        print total_data
+        return total_data
+        #
+    finally:
+        #将最后的结果全部都删除，因为tempfile.mkstemp需要手动删除缓存文件
+        os.remove(fasta_filename)
+        os.remove(output_filename)
+#定义一个function，该function的功能是对过长或者过短的区域从中间位置开始编号
+#输入：序列，额定长度
+#输出编好号码的字典，键为序列ID+区域名称
+def central_number(partial_seq,length,start,end,bi_end=None):
+    #首先定义A-Z字母表，这个将来是用来做编号的字符用
+    char_insert="ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    char_insert_rev="ZYXWVUTSRQPONMLKJIHGFEDCBA"
+    num_insert="123456789"
+    num_insert_rev="987654321"
+    #首先检查给定的氨基酸序列的长度
+    len_aa=len(partial_seq)
+    #################################首先考虑氨基酸过短的情况的数量分配#################
+    if len_aa<length:
+        #判断氨基酸的长度是不是奇数
+        #假如氨基酸的序列长度是奇数
+        if len_aa%2:
+            #左侧的氨基酸序列长度占一半加1
+            left_len=len_aa/2+1
+        #假如氨基酸序列的长度是偶数
+        elif not len_aa%2:
+            #左侧的氨基酸序列长度占一半
+            left_len=len_aa/2
+        #不管是奇数还是偶数，氨基酸右侧的氨基酸数量都只是一半
+        right_len=len_aa/2
+
+    #####################################考虑氨基酸序列过长的情况的数量分配#####################
+    #并且从两端编号的参数为假，那么只从一段编号
+    elif len_aa>length:
+        #判断length是奇数还是偶数
+        #假如是奇数
+        if length%2:
+            left_len=length/2+1
+        #假如是偶数
+        elif not length%2:
+            left_len=length/2
+        right_len=length/2
+        #判断完主框架两端的排列情况，随后判断插入的序列的排布
+        #假如序列只是从一端排布，那么直接最后的数字加上字母即可
+        #假如序列是从两端排布，需要检查插入序列的数量，并且按照数量进行编号
+        if bi_end:
+            #获取出所有的插入序列的长度
+            len_insert=len_aa-length
+            #假如插入序列是偶数的，那么将其平均分配
+            if not len_insert%2:
+                right_insert=left_insert=len_insert/2
+            #假如插入序列是奇数
+            elif len_insert%2:
+               left_insert=len_insert/2
+               right_insert=len_insert/2+1
+
+    #检查这个长度和预定义长度之间的关系
+    #假如这个长度小于预定义长度，那么就在中间插入"-"符号
+    if len_aa<length:
+        #判断氨基酸长度是不是偶数，假如是偶数直接添加进去即可，假如是奇数那么左侧可以多一个，在加上"-"
+        ranked_aa=partial_seq[:left_len]+"-"*(length-len_aa)+partial_seq[-(right_len):]#-n就能取n个值
+        ranked_num=range(start,end+1)
+    #假如氨基酸的序列长度过与标准长度一样长
+    elif len_aa==length:
+        ranked_aa=partial_seq
+        ranked_num=range(start,end+1)
+    #假如氨基酸的序列长度大于序列的标准长度
+    elif len_aa>length:
+        #判断标准长度是奇数还是偶数，从而来确定氨基酸的排列情况
+        #氨基酸的排列顺序不会变化
+        ranked_aa=partial_seq
+        if not bi_end:
+            #排列的号码
+            ranked_num_origin=range(start,start+left_len)+zip([str(start+left_len-1)]*(len_aa-length),char_insert[:len_aa-length])+range(end-right_len+1,end+1)
+            #print ranked_num_origin
+            ranked_num=transfer_char(ranked_num_origin,bi_end)
+        #假如需要从两侧开始进行编号
+        elif bi_end:
+            ranked_num_origin=range(start,start+left_len)+zip([str(start+left_len-1)]*(left_insert),num_insert[:left_insert])+zip([str(end-right_len+1)]*right_insert,num_insert_rev[-(right_insert):])+range(end-right_len+1,end+1)
+            #print start+left_len-1,end-right_len+1
+            #print ranked_num_origin
+            ranked_num=transfer_char(ranked_num_origin,bi_end)
+    #返回编好后的氨基酸序列和编号
+    #print ranked_aa,ranked_num
+    return [ranked_aa,ranked_num]
+#定义一个function，该function的功能是通过给定的位置指定的位置开始缺失和插入（从指定的位置向后缺失和插入不向前）
+#输入参数：氨基酸序列，指定插入缺失位置，开始和结束的位置，区域长度
+#输出结果：氨基酸序列和编号
+def pos_num(sequence,length,start_pos,end_pos,pos=None,bi_end=None):
+    #定义插入字符的顺序
+    char_insert="ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    char_insert_rev="ZYXWVUTSRQPONMLKJIHGFEDCBA"
+    num_insert="123456789"
+    num_insert_rev="987654321"
+    #首先检测pos是否存在，假如pos不存在直接用central_number进行编号
+    if not pos:
+        result_num=central_number(sequence,length,start_pos,end_pos,bi_end)
+    #假如pos存在
+    elif pos:
+        #首先检测氨基酸长度
+        len_aa=len(sequence)
+        #检测指定的位置和开始的位置之间的长度
+        st_left_len=pos-start_pos+1#st代表standar
+        st_right_len=end_pos-pos#由于右侧的序列不包括pos这个位置
+        #检查氨基酸的序列长度和左侧序列的长度的关系
+        #假如氨基酸序列长度大于总length
+        if len_aa>length:
+            ranked_aa=sequence
+            ranked_num_origin=range(start_pos,pos+1)+zip([str(pos)]*(len_aa-length),char_insert[:len_aa-length])+range(pos+1,end_pos+1)
+            ranked_num=transfer_char(ranked_num_origin,bi_end)
+        #假如氨基酸的长度和length相同，那么编号不用变，氨基酸序列不用变
+        elif len_aa==length:
+            ranked_aa=sequence
+            ranked_num=range(start_pos,end_pos+1)
+        #假如氨基酸的长度小于length,检查氨基酸序列的长度和左侧序列长度的关系，之后分别进行编号
+        elif len_aa<length:
+            #假如氨基酸的长度小于或者等于左侧的氨基酸的长度
+            if len_aa<=st_left_len:
+                #那么左侧是氨基酸，右侧全是"-"
+                ranked_aa=sequence+"-"*(st_left_len-len_aa)+"-"*st_right_len
+            #假如氨基酸的序列比左侧的长度长
+            elif len_aa>st_left_len:
+                ranked_aa=sequence[:st_left_len]+"-"*(length-len_aa)+sequence[-(st_right_len-(length-len_aa)):]#-n将来就会有n个氨基酸
+            ranked_num=range(start_pos,end_pos+1)
+        #将排序后的氨基酸和序号
+        result_num=[ranked_aa,ranked_num]
+    #返回最后的结果
+    return result_num
+#定义一个function，该function的功能是通过给定的氨基酸序列然后根据氨基酸序列的长度以及首尾的编号对氨基酸序列编号（从两端编号）
+#输入参数：氨基酸序列，额定长度，起始位置，终止位置
+#输出结果：重新编排的氨基酸序列，编号
+def bi_num(partial_seq,length,pos_start,pos_end):#bi的意思是两的意思,将来编号将从两个方向开始
+    #计算氨基酸序列的长度
+    len_aa=len(partial_seq)
+    #因为只考虑氨基酸序列太长的情况，太短的情况按照上面的方式就可以
+    assert len_aa>length
+    #获取左端和右端的氨基酸序列长度
+    #假如length是一个奇数
+    if length%2:
+        len_left=length/2+1
+    #假如length是一个偶数
+    elif not length%2:
+        pass
+
+#输入参数：列表或者元组
+#输出结果：全部转化为字符的列表
+def transfer_char(list_data,bi_end=None):
+    #预定义一个空列表，这个列表可以用来储存转化后的数据
+    transformed_data=[]
+    #######################这个function通过分析数据的类型而区别对待进行分析##############################
+    for num_n in list_data:
+	#首先利用for循环遍历其中的数据
+	#查看当前数据是不是列表
+	if isinstance(num_n,int):
+            #转化为字符
+            char_n=str(num_n)
+            transformed_data.append(char_n)
+        elif isinstance(num_n,str):
+	    transformed_data.append(num_n)
+	#假如这个数据是元组,并且不需要从两端编号
+	elif isinstance(num_n,tuple) and  not bi_end:
+	    #遍历其中的数据
+	    #将元组中的数据合并
+            transfer_n=transfer_char(num_n)
+            #print transfer_n
+            char_num_n="".join(transfer_n)
+            #把转化后的数据放到列表中去
+	    transformed_data.append(char_num_n)
+        #假如需要从两端开始编号
+        elif isinstance(num_n,tuple) and bi_end:
+            #遍历其中的数据
+            #将元组中的数据合并
+            transfer_n=transfer_char(num_n)
+            #print transfer_n
+            char_num_n=".".join(transfer_n)
+            #把转化后的数据放到列表中去
+            transformed_data.append(char_num_n)
+    #返回数据
+    #print transformed_data
+    return transformed_data
+#定义一个function，该function的功能是通过给定的scheme，将给定的FR/CDR进行编号
+#输入参数：提取出来的框架区和CDR区，编号的scheme
+#输出结果：字典{编号：编好号的序列}
+def number_seq(sequence,scheme="IMGT"):
+    #首先利用预定义的模块获取各个区域的序列
+    region_seq=divide_region(sequence,scheme)
+    #获取各个区域的序列并且储存在列表中
+    #假如编号系统是将FR1分为两个部分的
+    FR1_1_seq=region_seq["sequence"][0]["FR1_1"]#这里的零是字典储存在总的字典中的元组中
+    FR1_2_seq=region_seq["sequence"][0]["FR1_2"]
+    FR2_seq=region_seq["sequence"][0]["FR2"]
+    FR3_seq=region_seq["sequence"][0]["FR3"]
+    FR4_seq=region_seq["sequence"][0]["FR4"]
+    CDR1_seq=region_seq["sequence"][0]["CDR1"]
+    CDR2_seq=region_seq["sequence"][0]["CDR2"]
+    CDR3_seq=region_seq["sequence"][0]["CDR3"]
+    #获取轻重链的信息
+    chain_type=region_seq["sequence"][2]
+    #将所有框架的信息放到一个列表中
+    #all_region_seq=[FR1_seq,FR2_seq,FR3_seq,FR4_seq,CDR1_seq,CDR2_seq,CDR3_seq]
+    #假如编号系统是IMGT
+    if scheme=="IMGT":
+        #预定义参数用来指示将来需要从两端开始编号
+        bi_end=True
+        #针对每一个区域分别进行编号
+        #对于FR1首先获取FR1区域的序列
+        #FR1=all_region_seq[0]
+        ############################################对FR1进行编号###################################################
+        #利用pos_num模块进行分析
+        FR1_1_result=pos_num(FR1_1_seq,23,1,23,9)#九表示缺失和插入将来出现在第十位置之后
+        FR1_2_result=pos_num(FR1_2_seq,3,24,26)
+        #print FR1_result
+        #print result_num
+        #对于FR2
+        #FR2=all_region_seq[1]
+        FR2_result=central_number(FR2_seq,17,39,55)
+        #print FR2_result
+        #D对于FR3
+        #FR3=all_region_seq[2]
+        FR3_result=central_number(FR3_seq,39,66,104)
+        #对于FR4
+        #FR4=all_region_seq[3]
+        FR4_result=central_number(FR4_seq,11,118,128)
+        #print FR3_result
+        #对于CDR1
+        #CDR1=all_region_seq[4]
+        CDR1_result=central_number(CDR1_seq,12,27,38,bi_end)
+        #print CDR1_result
+        #对于CDR2
+        #CDR2=all_region_seq[5]
+        CDR2_result=central_number(CDR2_seq,10,56,65,bi_end)
+        #print CDR2_result
+        #对于CDR3
+        #CDR3=all_region_seq[6]
+        CDR3_result=central_number(CDR3_seq,13,105,117,bi_end)
+        #print CDR3
+        #print CDR3_result
+    elif scheme=="Kabat":
+        #假如这个氨基酸的链的类型是重链
+        if chain_type=="H":
+            #针对每一个区域分别进行编号
+            #对于FR1首先获取FR1区域的序列
+            #FR1=all_region_seq[0]
+            #利用central_number模块进行分析
+            #假如FR1的长度长于30，那么就插入到第六位以后
+            #if len(FR1)>30:
+                #利用pos_num进行编号
+            #    FR1_result=pos_num(FR1,30,1,30,6)
+            #elif len(FR1)<=30:
+            #    FR1_result=central_number(FR1,30,1,30)
+            if len(FR1_1_seq)>=22:
+                FR1_1_result=pos_num(FR1_1_seq,22,1,22,6)
+            elif len(FR1_2_seq)<22:
+                FR1_1_result=pos_num(FR1_1_seq,22,1,22,6)
+            FR1_2_result=pos_num(FR1_2_seq,8,23,30)
+            #print FR1_result
+            #print result_num
+            #对于FR2
+            #FR2=all_region_seq[1]
+            FR2_result=central_number(FR2_seq,12,36,49)
+            #print FR2_result
+            #D对于FR3
+            #FR3=all_region_seq[2]
+       
+            FR3_result=central_number(FR3_seq,29,66,94)
+            #对于FR4
+            #FR4=all_region_seq[3]
+            FR4_result=central_number(FR4_seq,11,103,113)
+            #print FR3_result
+            #对于CDR1
+            #CDR1=all_region_seq[4]
+            #假如氨基酸的序列长度大于标准长度,插入的位置位于35位之后
+            if len(CDR1_seq)>=5:
+                CDR1_result=pos_num(CDR1_seq,5,31,35,35)
+            #假如氨基酸的序列长度小于标准的长度，那么从中间开始减少
+            elif len(CDR1_seq)<=5:
+                CDR1_result=pos_num(CDR1_seq,5,31,35)
+            #print CDR1_result
+            #对于CDR2
+            #CDR2=all_region_seq[5]
+            #假如CDR2的长度大于标准长度
+            if len(CDR2_seq)>=16:
+                CDR2_result=pos_num(CDR2_seq,16,50,65,52)
+            #假如序列小于标准长度那么就从中间进行减少
+            elif len(CDR2_seq)<16:
+                CDR2_result=central_number(CDR2_seq,16,50,65)
+            #print CDR2_result
+            #对于CDR3
+            #CDR3=all_region_seq[6]
+            #假如CDR3的长度大于13，那么就从100位以后开始编号
+            if len(CDR3_seq)>=8:
+                CDR3_result=pos_num(CDR3_seq,8,95,102,100)
+            elif len(CDR3_seq)<8:
+                CDR3_result=central_number(CDR3_seq,8,95,102)
+        elif chain_type=="K" or chain_type=="L":
+            #针对每一个区域分别进行编号
+            #对于FR1首先获取FR1区域的序列
+            #FR1=all_region_seq[0]
+            #利用central_number模块进行分析
+            #假如FR1的长度长于30，那么就插入到第六位以后
+            if len(FR1_1_seq)>23:
+                #利用pos_num进行编号
+                FR1_1_result=pos_num(FR1_1_seq,23,1,23,6)
+            elif len(FR1_1_seq)<=23:
+                FR1_1_result=central_number(FR1_1_seq,23,1,23)
+            FR1_2_result=None
+            #对于FR2
+            #FR2=all_region_seq[1]
+            FR2_result=central_number(FR2_seq,15,35,49)
+            #D对于FR3
+            #FR3=all_region_seq[2]
+            FR3_result=central_number(FR3_seq,32,57,88)
+            #对于FR4
+            #FR4=all_region_seq[3]
+            FR4_result=central_number(FR4_seq,11,98,108)
+            #对于CDR1
+            #CDR1=all_region_seq[4]
+            #假如氨基酸的序列长度大于标准长度,插入的位置位于35位之后
+            if len(CDR1_seq)>=11:
+                CDR1_result=pos_num(CDR1_seq,11,24,34,27)
+            #假如氨基酸的序列长度小于标准的长度，那么从中间开始减少
+            elif len(CDR1_seq)<11:
+                CDR1_result=pos_num(CDR1_seq,11,24,34)
+            #对于CDR2
+            #CDR2=all_region_seq[5]
+            #假如CDR2的长度大于标准长度
+            if len(CDR2_seq)>=7:
+                CDR2_result=pos_num(CDR2_seq,7,50,56,52)
+            #假如序列小于标准长度那么就从中间进行减少
+            elif len(CDR2_seq)<7:
+                CDR2_result=central_number(CDR2_seq,7,50,56)
+            #对于CDR3
+            #CDR3=all_region_seq[6]
+            #假如CDR3的长度大于13，那么就从100位以后开始编号
+            if len(CDR3_seq)>=9:
+                CDR3_result=pos_num(CDR3_seq,9,89,97,95)
+            elif len(CDR3_seq)<9:
+                CDR3_result=central_number(CDR3_seq,9,89,97)
+    #假如编号系统是Chothia
+    elif scheme=="Chothia":
+        #假如这个氨基酸的链的类型是重链
+        if chain_type=="H":
+            #针对每一个区域分别进行编号
+            #对于FR1首先获取FR1区域的序列
+            #FR1=all_region_seq[0]
+            #利用central_number模块进行分析
+            #假如FR1的长度长于30，那么就插入到第六位以后
+            #if len(FR1)>25:
+                #利用pos_num进行编号
+            #    FR1_result=pos_num(FR1,25,1,25)
+            #elif len(FR1)<=25:
+            #    FR1_result=central_number(FR1,25,1,25)
+            FR1_1_result=pos_num(FR1_1_seq,22,1,22)
+            FR1_2_result=pos_num(FR1_2_seq,3,23,25,25)          
+            #print FR1_result
+            #print result_num
+            #对于FR2
+            #FR2=all_region_seq[1]
+            #由于FR2正常状态下相对于IMGT就有两个缺失，那么假如与IMGT等长，那么就插入在33位后方
+            FR2_result=pos_num(FR2_seq,20,33,52,33)
+            #print FR2_result
+            #D对于FR3
+            #FR3=all_region_seq[2]
+            FR3_result=central_number(FR3_seq,40,56,95)
+            #对于FR4
+            #FR4=all_region_seq[3]
+            FR4_result=central_number(FR4_seq,11,103,113)
+            #print FR3_result
+            #对于CDR1
+            #CDR1=all_region_seq[4]
+            #假如氨基酸的序列长度大于标准长度,插入的位置位于35位之后
+            if len(CDR1_seq)>=7:
+                CDR1_result=pos_num(CDR1_seq,7,26,32,31)
+            #假如氨基酸的序列长度小于标准的长度，那么从中间开始减少
+            elif len(CDR1_seq)<=7:
+                CDR1_result=pos_num(CDR1_seq,7,26,32)
+            #print CDR1_result
+            #对于CDR2
+            #CDR2=all_region_seq[5]
+            #假如CDR2的长度大于标准长度
+            if len(CDR2_seq)>=3:
+                CDR2_result=pos_num(CDR2_seq,3,53,55,52)
+            #假如序列小于标准长度那么就从中间进行减少
+            elif len(CDR2_seq)<3:
+                CDR2_result=central_number(CDR2_seq,3,53,55)
+            #print CDR2_result
+            #对于CDR3
+            #CDR3=all_region_seq[6]
+            #假如CDR3的长度大于13，那么就从100位以后开始编号
+            if len(CDR3_seq)>=6:
+                CDR3_result=pos_num(CDR3_seq,6,96,101,100)
+            elif len(CDR3_seq)<6:
+                CDR3_result=central_number(CDR3_seq,6,96,101)
+        elif chain_type=="K" or chain_type=="L":
+            #针对每一个区域分别进行编号
+            #对于FR1首先获取FR1区域的序列
+            #FR1=all_region_seq[0]
+            #利用central_number模块进行分析
+            #假如FR1的长度长于30，那么就插入到第六位以后
+            #if len(FR1)>25:
+            #    #利用pos_num进行编号
+            #    FR1_result=pos_num(FR1,25,1,25)
+            #elif len(FR1)<=25:
+            #    FR1_result=central_number(FR1,25,1,25)
+            FR1_1_result=pos_num(FR1_1_seq,23,1,23)
+            FR1_2_result=pos_num(FR1_2_seq,2,24,25,25)
+            #对于FR2
+            #FR2=all_region_seq[1]
+            FR2_result=central_number(FR2_seq,17,33,49)
+            #D对于FR3
+            #FR3=all_region_seq[2]
+            FR3_result=central_number(FR3_seq,38,53,90)
+            #对于FR4
+            #FR4=all_region_seq[3]
+            FR4_result=central_number(FR4_seq,11,98,108)
+            #对于CDR1
+            #CDR1=all_region_seq[4]
+            #假如氨基酸的序列长度大于标准长度,插入的位置位于35位之后
+            if len(CDR1_seq)>=7:
+                CDR1_result=pos_num(CDR1_seq,7,26,32,30)
+            #假如氨基酸的序列长度小于标准的长度，那么从中间开始减少
+            elif len(CDR1_seq)<7:
+                CDR1_result=pos_num(CDR1_seq,7,26,32)
+            #对于CDR2
+            #CDR2=all_region_seq[5]
+            #假如CDR2的长度大于标准长度
+            if len(CDR2_seq)>=3:
+                CDR2_result=pos_num(CDR2_seq,3,50,52)
+            #假如序列小于标准长度那么就从中间进行减少
+            elif len(CDR2_seq)<3:
+                CDR2_result=central_number(CDR2_seq,3,50,52)
+            #对于CDR3
+            #CDR3=all_region_seq[6]
+            #假如CDR3的长度大于13，那么就从100位以后开始编号
+            if len(CDR3_seq)>=6:
+                CDR3_result=pos_num(CDR3_seq,6,91,96,95)
+            elif len(CDR3_seq)<6:
+                CDR3_result=central_number(CDR3_seq,6,91,96)
+    #print FR1_result[0],CDR1_result[0],FR2_result[0],CDR2_result[0],FR3_result[0],CDR3_result[0]
+    #print FR1_result[1],CDR1_result[1],FR2_result[1],CDR2_result[1],FR3_result[1],CDR3_result[1]
+    #假如FR1_2_seq中并没有序列也就是说FR1到23为截止了，所以第二部分没有序列
+    if not FR1_2_result:
+        all_result_aa="\t".join(list(FR1_1_result[0]+CDR1_result[0]+FR2_result[0]+CDR2_result[0]+FR3_result[0]+CDR3_result[0]+FR4_result[0]))
+        all_result_num="\t".join(transfer_char(FR1_1_result[1]+CDR1_result[1]+FR2_result[1]+CDR2_result[1]+FR3_result[1]+CDR3_result[1]+FR4_result[1]))
+    elif FR1_2_result:
+        all_result_aa="\t".join(list(FR1_1_result[0]+FR1_2_result[0]+CDR1_result[0]+FR2_result[0]+CDR2_result[0]+FR3_result[0]+CDR3_result[0]+FR4_result[0]))
+        all_result_num="\t".join(transfer_char(FR1_1_result[1]+FR1_2_result[1]+CDR1_result[1]+FR2_result[1]+CDR2_result[1]+FR3_result[1]+CDR3_result[1]+FR4_result[1]))
+    #print [all_result_aa,all_result_num]
+    return[all_result_aa,all_result_num]
+    ################################首先将氨基酸序列解析为各个区域#######################################
+    
+
+if __name__=="__main__":
+    import argparse
+    #确定一个参数数据储存对象
+    parser=argparse.ArgumentParser()
+    #添加氨基酸序列参数
+    parser.add_argument("sequence",type=str,help="the sequence of antibody amino acid")
+    #添加编号的系统编号（可选IMGT,KABAT,CHOTHIA）
+    parser.add_argument("--scheme",type=str,default="IMGT",choices=["IMGT","Chothia","Kabat"],help="choose the scheme that used to number the amino acid sequence")
+    parser.add_argument("-f","--files",type=str,help="make a new file to store the numbered data")
+    parser.add_argument("-p","--path",type=str,help="choose a path to store the file that contain the message of numbered sequence")
+    all_args=parser.parse_args()
+    #获取序列参数
+    sequence=all_args.sequence
+    #获取编号的种类参数
+    scheme=all_args.scheme
+    #获取是否新建文件储存信息
+    mk_file=all_args.files
+    #获取文件储存的文件夹
+    path_store=all_args.path
+    #接下来进行分析
+    print sequence,scheme
+    list_numbered=number_seq(sequence,scheme)
+    #判断是否要把编号信息写入文件
+    #假如信息需要储存在文件中
+    if mk_file:
+        #检查是否指定了文件储存的路径
+        if path_store and os.path.isdir(path_store):
+            target_folder=path_store
+        #假如没有指定文件夹
+        elif not path_store:
+            target_folder=os.getcwd()
+        #转换到指定的目录中
+        os.chdir(target_folder)
+        #新建文件名称
+        data_info=open("%s.txt"%mk_file,"w")
+        aa_seq,aa_num=list_numbered
+        data_info.write(aa_seq+"\n"+aa_num+"\n")
+        data_info.close()
+    elif not mk_file:
+        print list_numbered
+
+       
+    

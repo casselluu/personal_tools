@@ -1,4 +1,4 @@
-#/usr/local/bin/python
+#!/usr/local/bin/python
 #coding=utf-8
 #导入需要的文件
 from hmmer_parser import *
@@ -43,7 +43,193 @@ def hmm_analysis_seq(aa_seq):
     #利用定义的模块分析这个分析得到的结果
     info_dict=get_info_from_hmmer_handle(parse_result)
     print info_dict
+    #返回注释的数据
+    return info_dict
+#定义一个function，该function的功能是通过解析hmmscan的输出文件，从而获取IMGT每个位置上的信息
+#输入参数：获取到的hmmscan分析结果的信息字典
+#输出结果：每个位置的信息的列表
+def get_pos_info(aa_sequences,info_dict):
+    #首先提取info_dict中的匹配信息
+    for query_id,info_list in info_dict.items():
+        #获取refer_string和state_string,refer_string是指匹配状态和插入的注释(模板的相对位置变化)，stat_string是query_seq的匹配状态和插入的注释（氨基酸序列的相对位置变化）
+        match_status=info_list[-3]
+        refer_string=info_list[-2]
+        state_string=info_list[-1]
+        query_start=info_list[4]
+        query_end=info_list[5]
+        hmm_start=info_list[2]
+        hmm_end=info_list[3]
+        species=info_list[6]
+        ctype=info_list[7]
+        #判断hmmstart与query_start之间的关系，根据他们的关系决定抗体序列的开始位置
+        #调整完氨基酸开始的位置之后对需要调整的开始的字符也相应调整
+        if hmm_start<=query_start and query_start<=5:
+            #start_pos=query_start-hmm_start
+            match_status=aa_sequences[query_start-hmm_start:query_start]+match_status
+            #print match_status
+            #在refer_string前面添加hmm_start个x符号
+            refer_string="x"*hmm_start+refer_string
+            #print refer_string
+            #在state_string前面添加hmm_start个*
+            state_string="*"*hmm_start+state_string
+            #print state_string
+        #假如hmmscan能够将所有前方的氨基酸序列注释
+        elif hmm_start>query_start and query_start<=5:
+            #start_pos=query_start-hmm_start
+            match_status=aa_sequences[:query_start]+match_status
+            #print match_status
+            #在refer_string前面添加hmm_start个x符号
+            refer_string="x"*query_start+refer_string
+            #print refer_string
+            #在state_string前面添加hmm_start个*
+            state_string="*"*query_start+state_string
+            #print state_string
 
+            #那么匹配状态相关的字符不用变
+            #start_pos=1
+        #判断hmm_end与query_end之间的关系，根据他们之间的关系判断抗体序列的结束位置
+        if len(aa_sequences)-query_end>128-hmm_end:
+            #end_pos=len(query_end)+(128-hmm_end)
+            #在match_status后方加上后方的氨基酸
+            match_status=match_status+aa_sequences[query_end:query_end+(128-hmm_end)]
+            #print match_status
+            #修改refer_string
+            refer_string=refer_string+"x"*(128-hmm_end)
+            #print refer_string
+            #修改state_string
+            state_string=state_string+"*"*(128-hmm_end)
+            #print state_string
+        elif len(aa_sequences)-query_end<=128-hmm_end:
+            #end_pos=len(query_end)+(128-hmm_end)
+            #在match_status后方加上后方的氨基酸
+            match_status=match_status+aa_sequences[query_end:]
+            #print match_status
+            #修改refer_string
+            refer_string=refer_string+"x"*(len(aa_sequences)-query_end)
+            #print refer_string
+            #修改state_string
+            state_string=state_string+"*"*(len(aa_sequences)-query_end)
+            #print state_string
+            #end_pos=len(aa_sequences)
+        print match_status
+        print refer_string
+        print state_string
+        #接下来对match_status,state_string,refer_string同时进行信息提取
+        return {aa_sequences:[match_status,refer_string,state_string,ctype]}
+#定义一个function,该function的功能是通过给定的match_status,refer_string,state_string将其转化为一个列表（因为需要有顺序）
+#输入参数：一个get_pos_info返回的字典
+#输出结果：一个列表含有各个位置上的氨基酸信息和位置信息
+def zip_status_info(status_dict_data):
+    #首先定义一个空的列表
+    zipped_list=[]
+    for aa_seq,status_list in status_dict_data.items():
+        #提取其中的信息
+        match_status=status_list[0]
+        refer_string=status_list[1]
+        state_string=status_list[2]
+        ctype=status_list[3]
+        #接下利用for循环将三者的信息融合在一起
+        for i in xrange(len(match_status)):
+            #获取match的字符
+            match_n=match_status[i]
+            #获取refer字符
+            refer_n=refer_string[i]
+            #获取state字符
+            state_n=state_string[i]
+            #将三者放到一个元组中
+            zipped_list.append((match_n,refer_n,state_n))
+    #返回整合后的列表
+    print ctype,zipped_list
+    return ctype,zipped_list
+#定义一个function，该function的功能是将编号的zip_list重新编号，使之不乱
+#定义一个function，该function的功能是通过获取的zipped_list信息（每个位置的注释信息）进行编号
+#输入的参数：编号系统，现有位置注释信息
+#输出的结果：对氨基酸序列进行编号
+def number_with_scheme(scheme_n,ctype,zipped_list):
+    #首先定义每个编号系统的标准注释字符串
+    normal_char_dict={
+    "IMGT":'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+    "KABAT_H":'XXXXXXXXXIXXXXXXXXXXXXXXXXXXXXIIIIXXXXXXXXXXXXXXXXXXXXXXXIXIIXXXXXXXXXXXIXXXXXXXXXXXXXXXXXXIIIXXXXXXXXXXXXXXXXXXIIIXXXXXXXXXXXXX',
+    "KABAT_L":'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXIIIIIIXXXXXXXXXXXXXXXXXXXXXXIIIIIIIXXXXXXXXIXXXXXXXIIXXXXXXXXXXXXXXXXXXXXXXXXXXXIIIIXXXXXXXXXXXXXXX',
+    "CHOTHIA_H":'XXXXXXXXXIXXXXXXXXXXXXXXXXXXXXIIIIXXXXXXXXXXXXXXXXXXXXXXXIXIIXXXXXXXXXXXIXXXXXXXXXXXXXXXXXXIIIXXXXXXXXXXXXXXXXXXIIIXXXXXXXXXXXXX',
+    "CHOTHIA_L":'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXIIIIIIXXXXXXXXXXXXXXXXXXXXXXIIIIIIIXXXXXXXXIXXXXXXXIIXXXXXXXXXXXXXXXXXXXXXXXXXXXIIIIXXXXXXXXXXXXXXX'
+    }
+    #获取指定的编号类型的字符串
+    standard_string=""
+    #假如编号是IMGT
+    if scheme_n.upper()=="IMGT":
+        standard_string=normal_char_dict["IMGT"]
+    #假如编号是KABAT或者chothia
+    else :
+        standard_string=normal_char_dict[scheme_n.upper()+"_"+ctype]
+    print scheme_n.upper()+"_"+ctype
+    print standard_string
+    #定义插入的索引
+    insert_char="ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    insert_char_reverse="ZYXWVUTSRQPONMLKJIHGFEDCBA"
+    ###########################################开始编号######################################
+    #预定义一个字符串用来记录编号
+    number_char=""
+    aa_char=""
+    #预定义一个数，记录插入的长度，缺失的长度
+    insert_len=0
+    del_n=0
+    #预定义一个数字，用来指示当前确认到的位置
+    pos_n=0
+    #定义所有氨基酸的种类
+    aa_kinds=set("GAVLIPFYWSTCMNQDEKRH")
+    #利用for循环获取zipped_list中的信息
+    for x in xrange(len(zipped_list)):
+        #获取该位置的详细信息，第一个位置为氨基酸，第二个位置为hmm匹配状态，第三个为氨基酸的匹配状态
+        char_n=zipped_list[x]
+        #将全部的序列分为三部分处理FR1,CDR1,FR2,CDR2,FR3,CDR3,位置信息将通过pos_n检查得知
+        if pos_n<=26:#FR1
+            #检查这个位置的状态
+            #判断当前位置是否应该前进一位
+            if char_n[1]=="x":
+                #那么指示当前的位置就加1
+                pos_n+=1
+            #假如该位置是插入
+            elif char_n[1]==".":
+                #pos_n不变（因为该位置不出现在128个hmm的标准状态之下）
+                pass
+            #检查标准情况下该pos_n的位置应该是什么样的状态
+            if standard_string[pos_n]=="X":
+                #查看当前位置是不是缺失状态，和氨基酸是不是正常
+                if char_n[0].upper() in aa_kinds and char_n[2]!=".":
+                    #那么在该位置上就进行编号并且把氨基酸放在这个位置之上
+                    number_char=str(pos_n)
+                    aa_char=char_n[0]
+                #假如这个位置是缺失
+                elif char_n[2]==".":
+                    number_char=str(pos_n)
+                    aa_char="-"
+            #假如按照标准情况下这个位置是插入，表示这个位置上的编号应该比标准的IMGT少
+            elif standard_string[pos_n]=="I":
+                #假如这个位置在IMGT中是match的，那么这个位置就应该是插入    
+                pass
+        #假如该位置是CDR1
+        elif pos_n>26 and pos_n<=38:
+            pass
+        #假如该位置是FR2
+        elif pos_n>38 and pos_n<=55:
+            pass
+        #假如该位置是CDR2
+        elif pos_n>55 and pos_n<=65:
+            pass
+        #假如该位置是FR3
+        elif pos_n>65 and pos_n<=104:
+            pass
+        #假如该位置是CDR3
+        elif pos_n>104 and pos_n<=117:
+            pass
+        #假如这个位置在CDR3之后
+        elif pos_n>117:
+            pass
+         
+            #那么这个位置就是正常的编码序列
+        if char_n[0].upper() in aa_kinds:
+            pass
 #定以一个function,该function的功能是通过给定的hmmscan数据文件的解析文件，将其hmm_start,hmm_end,query_start,query_end,匹配状态等参数信息返回
 #输入参数：hmmer_parse解析hmmscan输出的结果返回的数据
 #返回结果：一个含有 信息的列表
@@ -62,10 +248,16 @@ def get_info_from_hmmer_handle(hmmer_parse):
         evalue=1
         #利用for循环获取annotations中的hsp的信息
         for hsp in annotations.hsps:
+            #print dir(hsp)
             #获取当前hsp的evalue
             evalue_n=hsp.evalue
+            print str(hsp.aln[0].seq)
+            #print hsp.aln.colum_annotations
+            print "ooooooooooookkkkkkkkkkkkkkk"
+            query_start=hsp.query_start
+            #print hsp.aln_annotation
             #判断当前的evalue是否比预先设定的值小，小的话则获取其中的信息，否则表示这个序列是有问题的
-            if evalue_n<evalue:
+            if evalue_n<evalue and query_start<=5:
                 #替换evalue为较小的值
                 evalue=evalue_n
                 #获取query_id
@@ -78,11 +270,16 @@ def get_info_from_hmmer_handle(hmmer_parse):
                 query_start=hsp.query_start
                 #获取query_end
                 query_end=hsp.query_end
+                #获取物种信息以及链的类型信息
+                species,ctype=hsp.hit_id.split("_")
                 #获取匹配状态的字符
                 reference_string=hsp.aln_annotation["RF"]
                 state_string=hsp.aln_annotation["PP"]
-        #将获取到的信息放在字典中
-        info_dict[query_id]=[query_id,evalue,hmm_start,hmm_end,query_start,query_end,reference_string,state_string]
+                #获取IMGT的比对编号并且转化为字符串
+                #Seq('QLVeeESGG-DLVQPGGSLRLSCVASGFTF----SDYSMSWVRQAPGRGLEWVA...VSS', ProteinAlphabet())
+                match_status=str(hsp.aln[0].seq)
+                #将获取到的信息放在字典中
+                info_dict[query_id]=[query_id,evalue,hmm_start,hmm_end,query_start,query_end,species,ctype,match_status,reference_string,state_string]
     #返回获取到的数据
     return info_dict
 
@@ -107,7 +304,11 @@ if __name__=="__main__":
     #假如给定的是序列
     if not para_dict.has_key("file") and para_dict.has_key("seq"):
         #对序列进行分析
-        hmm_analysis_seq(para_dict["seq"]) 
-        #
-        
-
+        info_dict=hmm_analysis_seq(para_dict["seq"]) 
+        #对获取到的info_dict进行分析
+        pos_info_data=get_pos_info(para_dict["seq"],info_dict)
+        #获取ctype和每个位置的详细信息
+        ctype,zipped_data_list=zip_status_info(pos_info_data)
+        #进行编号
+        scheme_n="kabat"
+        number_with_scheme(scheme_n,ctype,zipped_data_list)
