@@ -49,6 +49,7 @@ def fake_rm_file(argv):
 #define a module,the function of this modlue is to mv the file to the target folder
 #the path_n is the folder that file will be moved to 
 def mv_file_folder(name_n,trash_day_folder):
+    #if te object to be removed is a folder
     if  os.path.isdir(name_n):
         name_n=name_n.strip("/")
 	#move file to the trash folder
@@ -71,7 +72,8 @@ def mv_file_folder(name_n,trash_day_folder):
 	    print "folder:",name_n," will be deleted"
     #if the name_n is a file,just copy it to the trash folder of today
     elif os.path.isfile(name_n):
-        if os.path.exists(os.path.join(trash_day_folder,name_n)):
+        file_name=os.path.split(name_n)[-1]
+        if os.path.exists(os.path.join(trash_day_folder,file_name)):
             os.rename(name_n,name_n+"1")
             mv_file_folder(name_n+"1",trash_day_folder)
         elif not os.path.exists(os.path.join(trash_day_folder,name_n)):
