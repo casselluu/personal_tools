@@ -1,0 +1,60 @@
+#!/usr/local/bin/python
+#coding=utf-8
+import os
+import argparse
+#定义一个function，该function的功能是通过给定的excel文件所在的路径和文件名称，将其按照H-CDR3的长度进行排序
+#输入参数：
+#输出结果：
+
+def sort_excel(path_n,file_n):
+    os.chdir(path_n)
+    #定义一个空列表用来储存将来计算完H-CDR3长度后的信息
+    processed_info=[]
+    #预定义第一行和最后一行的信息
+    header=""
+    last=""
+    #读取文件，将文件中所有的行储存在列表中
+    with open(file_n,"r") as content:
+        total_lines=content.readlines()
+        print total_lines
+        header=total_lines[0]
+        print header
+        all_lines=total_lines[1:-1]
+        last=total_lines[-1]
+        print last
+        #对每一行进行遍历，获取其中的CDR3长度的信息，并且储存在预定义的列表中
+        for line_n in all_lines:
+            print line_n
+            len_cdr3=len(line_n.split("\t")[2].split(" ")[-1])
+            #len_CDR3=len(list_n)
+            processed_info.append((line_n,len_cdr3))
+    #对列表进行排序
+    processed_info.sort(key=lambda x:int(x[-1]))
+    print processed_info
+    #预定义新文件，用来储存所有的排序后的信息
+    file_name=os.path.splitext(file_n)[0]+"_sorted"+os.path.splitext(file_n)[1]
+    new_file=open(file_name,"w")
+    #写入header信息
+    new_file.write(header)
+    for line_n in processed_info:
+        info_n=line_n[0]
+        #将行信息写入文件
+        new_file.write(info_n)
+    #写入尾信息
+    new_file.write(last)
+    new_file.close()
+
+if __name__=="__main__":
+    #path_n=r"/home/fanxuezhe/files/test_file/sort_excel_info"
+    #file_n="20190507_C5a_CDR_info.txt"
+    #sort_excel(path_n,file_n)
+    parser=argparse.ArgumentParser()
+    parser.add_argument("-p","--path",type=str,default=".",help="specify the path to the CDR excel file,default is .")
+    parser.add_argument("-f","--file",type=str,help="specify the file containing the CDR excel info")
+    all_args=parser.parse_args()
+    path_n=all_args.path
+    file_n=all_args.file
+    sort_excel(path_n,file_n)
+
+    
+

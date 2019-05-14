@@ -1,0 +1,60 @@
+#!/usr/local/bin/python
+#coding=utf-8
+"""
+这个脚本的主要功能是将给定的原始的胚系基因文件转化为正常的胚系基因文件
+"""
+import os
+import argparse
+#定义一个function，该function的功能是将给定的原始胚系基因文件转化为正规的胚系基因文件
+#输入参数：路径，文件名
+#输出结果：文件名（除后缀）+_formal+后缀
+def get_formal_germline(path_n,file_n):
+    os.chdir(path_n)
+    #检查file_n文件在路径path_n中是否存在
+    assert os.path.isfile(os.path.join(path_n,file_n)),"there do not exist the %s in %s"%(file_n,path_n)
+    #按照原来的文件名命名新的formal文件的文件
+    header=os.path.splitext(file_n)[0]
+    file_formal=open("%s_formal.fasta"%header,"w")
+    #预定义空的id和氨基酸序列
+    aa_seq=""
+    new_id=""
+    #对文件中的数据进行处理
+    with open(file_n,"r") as content:
+        all_seq=content.readlines()
+        #对所有的序列进行遍历，剔除ID中含有partial的序列，以及序列中含有终止密码子的序列
+        for i in xrange(len(all_seq)):
+            seq_list=[]
+            #首先获取id
+            id_n=all_seq[i]
+            #id下所有的不含">"符号的都是序列
+            if id_n.startswith(">"):
+                #假如这不是第一个id的话，那么就不写入文件，假如不是第一个序列，那么就把id和序列写入文件
+                if new_id and aa_seq and aa_seq.find("*")==-1 and new_id.find("partial")==-1:
+                    file_formal.write(new_id+"\n"+aa_seq+"\n")
+                #将氨基酸序列归0，表示又重头开始累积氨基酸序列
+                aa_seq=""
+                #记录下当前的id
+                new_id=id_n.strip("\r\n")
+            #假如当前的位置不是id，那么就开始累积序列
+            elif not id_n.startswith(">"):
+                aa_seq+=id_n.strip("\r\n")
+    file_formal.close()
+
+if __name__=="__main__":
+    #path_n=r"/home/fanxuezhe/files/blast_database_new/original_data"
+    #file_n="human_vh.fasta"
+    #get_formal_germline(path_n,file_n)
+    parser=argparse.ArgumentParser()
+    parser.add_argument("path",type=str,metavar="path to original fasta",help="specify the path to the orginal fasta file")
+    all_args=parser.parse_args()
+    path_n=all_args.path
+    if path_n==".":
+        path_n=os.getcwd()
+    files_all=os.listdir(path_n)
+    for file_n in files_all:
+        if os.path.splitext(file_n)[1]==".fasta" and not file_n.endswith("formal.fasta"):
+            get_formal_germline(path_n,file_n)
+    
+                
+                
+                

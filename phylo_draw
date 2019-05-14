@@ -1,0 +1,75 @@
+#!/usr/local/bin/python
+#coding=utf-8
+"""
+这个脚本的主要功能是通过给定的fasta文件及其路径对其进行进化树作图
+"""
+from hmmer_parser import *
+from align_own import clustalw_align_alone as clu
+from Bio import Phylo as pl
+import pylab
+import os
+import argparse
+#定义一个function,该function的功能是通过给定的文件夹和fasta文件名称对fasta文件做进化树分析
+#输入参数：fasta文件所在的路径，fasta文件名称
+#输出结果：对fasta文件进行作图的ascii结果
+def phylo_draw_new(path_n,fasta_file):
+    os.chdir(path_n)
+    file_name=os.path.splitext(fasta_file)[0]
+    #对fasta文件进行分析获取dnd文件
+    clu(path_n,fasta_file)
+    dnd_file=file_name+".dnd"
+    #读取dnd文件
+    tree=pl.read(dnd_file,"newick")
+    #print (tree)
+    new_file=open("%s_tree.txt"%file_name,"w")
+    #print help(pl.draw_ascii)
+    pl.draw_ascii(tree,new_file,80)
+    #print draw_n
+    tree.rooted=True
+    new_file.close()
+    #pl.write(tree,"tree.txt","nexus")
+    #pl.draw(tree)
+#定义一个function,该function的功能是通过给定的fasta文件去除其中重复的序列，并且把序列相同的id合并
+#输入参数：fasta文件的路径，fasta文件的名称
+#输出结果：为fasta文件名添加unique后新建文件，并且把相同序列的id合并
+def combine_same_seq_id(path_n,fasta_file):
+    os.chdir(path_n)
+    #取出文件名
+    file_name=os.path.splitext(fasta_file)[0]
+    #新建一个文件名
+    new_file_name=file_name+"_unique.fasta"
+    new_file=open(new_file_name,"w")
+    dict_fasta=fasta2dict(path_n,fasta_file)
+    #预定义列表储存所有唯一的序列
+    saw_seq=[]
+    #定义一个字典用来储存所有的唯一序列（键）和合并的id(值)
+    unique_seq_dict={}
+    #通过遍历将唯一的序列和合并的id放在字典中
+    for id_n,seq_n in dict_fasta.items():
+        if saw_seq.count(seq_n)==0:
+           saw_seq.append(seq_n)
+           unique_seq_dict[seq_n]=id_n
+        elif saw_seq.count(seq_n)==1:
+           unique_seq_dict[seq_n]=unique_seq_dict[seq_n]+"\\"+id_n
+    #print unique_seq_dict
+    #通过遍历将所有的合并后的id和序列写入一个文件中
+    for seq_n,id_n in unique_seq_dict.items():
+        new_file.write(id_n+"\n"+seq_n+"\n") 
+    new_file.close()
+if __name__=="__main__":
+    #path_n=r"/home/fanxuezhe/files/test_file/phylo_draw_folder"
+    #fasta_file="C-20190304-Secretion_sequences_VH.fasta"
+    #combine_same_seq_id(path_n,fasta_file)
+    #fasta_file_new=os.path.splitext(fasta_file)[0]+"_unique.fasta"
+    #phylo_draw_new(path_n,fasta_file_new)
+    parser=argparse.ArgumentParser()
+    parser.add_argument("-p","--path",default=".",type=str,metavar="path to the fasta file",help="specify the path to the fasta file that will be used to make phylo tree,default value is .")
+    parser.add_argument("file",type=str,metavar="fasta file name",help="specify the fasta file name in the given path")
+    all_args=parser.parse_args()
+    path_n=all_args.path
+    if path_n==".":
+        path_n=os.getcwd()
+    fasta_file=all_args.file
+    combine_same_seq_id(path_n,fasta_file)
+    fasta_file_new=os.path.splitext(fasta_file)[0]+"_unique.fasta"
+    phylo_draw_new(path_n,fasta_file_new)

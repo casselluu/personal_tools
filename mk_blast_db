@@ -1,0 +1,22 @@
+#!/usr/local/bin/python
+#coding=utf-8
+import os,argparse
+
+
+#定义一个function，该function的功能是将给定的文件夹中的所有文件都构建一个database
+#输入参数：含有fasta文件的路径
+#输出结果：各个fasta文件的blast的database文件
+def mk_blast_db(path_n,type_n="prot"):
+    os.chdir(path_n)
+    files_all=os.listdir(path_n)
+    for file_n in files_all:
+        if file_n.endswith(".fasta"):
+            os.system("makeblastdb -in %s -dbtype %s -parse_seqids"%(file_n,type_n))
+if __name__=="__main__":
+    parser=argparse.ArgumentParser()
+    parser.add_argument("path",type=str,help="specify the path to the fasta file to be build")
+    parser.add_argument("type",type=str,choices=["nucl","prot"],help="specify the data type,nucl corresponding to nucleic and prot corresponding to protein")
+    all_args=parser.parse_args()
+    path_n=all_args.path
+    type_n=all_args.type
+    mk_blast_db(path_n,type_n)

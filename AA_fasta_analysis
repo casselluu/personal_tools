@@ -1,0 +1,35 @@
+#!/usr/local/bin/python
+#coding=utf-8
+#首先从hmmer_parser中导入模块
+from hmmer_parser import *
+import argparse,os
+#
+if __name__=="__main__":
+    path_n=r"/home/fanxuezhe/files/test_file/test_AA_fasta_analsis/FGS_fasta/051801_TSLP"
+    #file_1="051801_TSLP_sequences_VL.fasta"
+    #file_2="051801_TSLP_sequences_VH.fasta"
+    #combine_vh_vl(path_n,file_1,file_2)
+    #matched_fasta=get_matched_vh_vl_name(path_n)
+    #print matched_fasta
+    #新建一个ArgumentParser()类
+    parser=argparse.ArgumentParser()
+    #添加参数，主要的参数内容有：fast文件的类型（FGS,NGS），fasta文件所在的路径，编号系统名称
+    parser.add_argument("mode",type=str,choices={"FGS","NGS"})
+    parser.add_argument("-p","--path",type=str,default=".",metavar="path to fasta",help="specify the path that the fasta folder exists,the default value is .")
+    parser.add_argument("-s","--scheme",type=str,default="LONGEST",choices=["KABAT","CHOTHIA","IMGT","LONGEST"],metavar="scheme of numbering",help="specify the scheme that would be used to get the CDR")
+    #解析所有的参数
+    all_args=parser.parse_args()
+    mode=all_args.mode
+    file_repo=all_args.path
+    if file_repo==".":
+        file_repo=os.getcwd()
+    scheme=all_args.scheme
+    #file_repo=r"/home/fanxuezhe/files/Lping/2019/4_16"
+    #scheme="KABAT"
+    #根据处理的模式的不同来区别进行处理（一代测序的处理方式为轻链和重链配对的fasta文件，二代测序只需要轻链或重链的fasta文件即可）
+    if mode=="NGS":
+        NGS_from_fasta(file_repo,scheme)
+    elif mode=="FGS":
+        FGS_from_fasta(file_repo,scheme)
+    #FGS_from_fasta(file_repo,scheme)
+

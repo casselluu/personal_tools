@@ -1,0 +1,113 @@
+#!/usr/local/bin/python
+#coding=utf-8
+import os
+from hmmer_parser import *
+import argparse
+#定义一个function,该function的功能是通过给定的两个fasta文件找出第二个文件中新的序列
+#输入参数：fasta文件所在的目录，file2将会和file1比对找出新的序列
+#输出结果：比对后新的结果写在新的fasta文件中
+def get_new_seq(path_n,file_1,file_2):
+    os.chdir(path_n)
+    #新建一个文件用来储存新出现的序列
+    file2_name=os.path.splitext(file_2)[0]
+    new_seq_file=open("%s_new_seq.fasta"%file2_name,"w")
+    #将所有的file1中的序列放在字典中，序列为键，id为值
+    origin_dict={}
+    with open(file_1,"r") as file_content:
+        all_lines=file_content.readlines()
+        for i in xrange(len(all_lines)-1):
+            id_n=all_lines[i]
+            if id_n.startswith(">"):
+                id_n.strip("\r\n")
+                seq_n=all_lines[i+1].strip("\r\n")
+                if origin_dict.has_key(seq_n):
+                    origin_dict[seq_n]=origin_dict[seq_n]+id_n
+                elif not origin_dict.has_key(seq_n):
+                    origin_dict[seq_n]=id_n
+    #接下来获取file2中的序列
+    with open(file_2,"r") as content:
+        all_lines=content.readlines()
+        for i in xrange(len(all_lines)-1):
+            id_n=all_lines[i].strip("\r\n")
+            if id_n.startswith(">"):
+                seq_n=all_lines[i+1].strip("\r\n")
+                if not origin_dict.has_key(seq_n):
+                    new_seq_file.write(id_n+"\n"+seq_n+"\n")
+                   
+    new_seq_file.close()
+#定义一个function，该function的功能是通过给定的两个文件，将两个文件通过id进行合并
+#输入参数：路径，需要合并的文件
+#输出结果：合并后的文件,VH_2中的序列放在后方
+def merge_file_id(path_n,file_1,file_2):
+    os.chdir(path_n)
+    #新建一个文件夹用来储存合并后的序列
+    file_name=file_2.split("_sequences")[0]
+    combined_file=open("%s_combined_file.fasta"%file_name,"w")
+    #将文件1转化为字典
+    dict_1=fasta2dict(path_n,file_1)
+    #将文件2转化为字典
+    dict_2=fasta2dict(path_n,file_2)
+    #遍历与合并
+    for id_n,seq_n in dict_2.items():
+        if dict_1.has_key(id_n):
+            seq_1=dict_1[id_n]
+            combined_file.write(">"+id_n+"\n"+seq_1+"\t"+seq_n+"\n")
+    combined_file.close()
+            
+if __name__=="__main__":
+     #path_n=r"/home/fanxuezhe/files/Lping/2019/4_16"
+     #file_vl="Mok_VH_VL_sequences_VL_CDR_sequences_edited_id.fasta"
+     #file_vh="Mok_VH_VL_sequences_VH_CDR_sequences_edited_id.fasta"
+     #merge_cdr_file(path_n,file_vl,file_vh)
+     #file_vl="success_sequences_VL_CDR_sequences_edited_id.fasta"
+     #file_vh="success_sequences_VH_CDR_sequences_edited_id.fasta"
+     #merge_cdr_file(path_n,file_vl,file_vh)
+      
+     #file_1="Mok_VH_VL_combined_file.fasta"
+     #file_2="success_sequences_VL_CDR_sequences_edited_id_combined_VH_VL_CDR.fasta"
+     #file_2="success_combined_file.fasta"
+     #file_1="Mok_VH_VL_sequences_VH_CDR_sequences_CDR3_only_edited_id.fasta"
+     #file_2="success_sequences_VH_CDR_sequences_CDR3_only_edited_id.fasta"
+     #merge_cdr_file(path_n,file_vl,file_vh)
+     #get_new_seq(path_n,file_1,file_2)
+     parser=argparse.ArgumentParser()
+     parser.add_argument("-p","--path",type=str,default=".",metavar="path to all files",help="specify the path that the old files and the new files exists,the default value is .")
+     parser.add_argument("-o","--old",nargs="*",metavar="old files",help="specify the old files")
+     parser.add_argument("-new","--new",nargs="*",metavar="new files",help="specify the file would be used to find new sequences")
+     #解析参数
+     all_args=parser.parse_args()
+     path_n=all_args.path
+     if path_n==".":
+         path_n=os.getcwd()
+     old_files=all_args.old
+     new_files=all_args.new
+     #首先转换工作目录
+     os.chdir(path_n)
+     #合并所有的旧文件
+     ##首先确定新合并文件的名称
+     ###预定义一个旧文件的名称
+     all_old_file="combined_all_old.fasta"
+     while old_files.count(all_old_file)!=0:
+         all_old_file=all_old_file.strip(".fasta")+"_old.fasta"
+     combined_old=open(all_old_file,"w")
+     for old_n in old_files:
+         with open(old_n,"r") as content:
+             lines=content.readlines()
+             for line_n in lines:
+                 combined_old.write(line_n)
+     combined_old.close()
+     #合并所有的新文件
+     ##首先确定新合并文件的名称
+     ###预定义一个旧文件的名称
+     all_new_file="combined_all_new.fasta"
+     while new_files.count(all_new_file)!=0:
+         all_new_file=all_new_file.strip(".fasta")+"_new.fasta"
+     combined_new=open(all_new_file,"w")
+     for new_n in new_files:
+         with open(new_n,"r") as content:
+             lines=content.readlines()
+             for line_n in lines:
+                 combined_new.write(line_n)
+     combined_new.close()
+     #接下来比较新旧文件的新文件
+     get_new_seq(path_n,all_old_file,all_new_file)

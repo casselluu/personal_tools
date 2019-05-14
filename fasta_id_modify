@@ -1,0 +1,81 @@
+#!/usr/local/bin/python
+#coding=utf-8
+import argparse,os
+
+"""
+这个脚本的功能是对fasta文件的id进行修改
+"""
+#定义一个function，该function的功能是通过给定的路径和文本文件来找出和id对应的字符，这个字符将来会加在id之后
+#输入参数：文件所在路径，文件名，分隔符，开始的行，结束的行，id所在的列，要添加字符所在的列
+#输出结果：返回一个字典{id:要添加的字符}
+def get_id_corres_info(path_n,file_n,sep_char,start_n,end_n,col_id,col_corres):
+    os.chdir(path_n)
+    #首先读取文件
+    with open(file_n,"r") as content:
+        all_lines=content.readlines()
+    #根据给定的信息确定将来需要处理的行
+    candidate_lines=all_lines[start_n-1:end_n]
+    #接下来将id和其对应的字符放在字典中
+    corres_dict={}
+    for line_n in candidate_lines:
+        id_n=line_n.split(sep_char)[col_id-1]
+        char_n=line_n.split(sep_char)[col_corres-1]
+        corres_dict[id_n]=char_n
+    #返回获取到的信息
+    return corres_dict
+#接下来定义一个function，该function的功能是通过给定的id和对应添加的字符的字典和要处理的文件，从而修改其id
+#输入参数：
+#输出结果：
+def edit_fasta_id(path_n,fasta_n,edit_dict,char_sep):
+    #转移工作目录
+    os.chdir(path_n)
+    #修改fasta文件
+    ##首先获取fasta文件的名称
+    fasta_name=os.path.splitext(fasta_n)[0]
+    ##定义新的文件的名称
+    new_file_name=fasta_name+"_edited_id.fasta"
+    ##新建文件
+    new_file=open(new_file_name,"w")
+    with open(fasta_n,"r") as file_content:
+        all_lines=file_content.readlines()
+        for line_n in all_lines:
+            if line_n.startswith(">"):
+                char_n=line_n.strip("\n>")
+                #检查给定的字符串是否存在给出的字典中
+                if edit_dict.has_key(char_n):
+                    line_n=">"+char_n+char_sep+edit_dict[char_n]+"\n"
+                elif not edit_dict.has_key(char_n):
+                    print "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",char_n
+                new_file.write(line_n)
+            elif not line_n.startswith(">"):
+                new_file.write(line_n)
+    ##关闭文件
+    new_file.close()
+if __name__=="__main__":
+    parser=argparse.ArgumentParser()
+    parser.add_argument("-p","--path",type=str,default=".",metavar="path to file",help="specify the path that contain the fasta file and the char file,default is .")
+    parser.add_argument("-f1","--file_char",type=str,metavar="file containing id and corresponding char",help="specify the file that containing the id and the corresponding char")
+    parser.add_argument("-f2","--fasta",type=str,metavar="fasta file",help="specify the files whose id needed to be edited")
+    parser.add_argument("-s","--sep",default="\t",metavar="sep char in the f1",help="specify the sep char in the f1 which used to get the id and the char")
+    parser.add_argument("-st","--start",default=1,type=int,metavar="start line number",help="specify  the start line number that need to be processed")
+    parser.add_argument("-e","--end",default=None,type=int,metavar="start line number",help="specify  the end line number that need to be processed")
+    parser.add_argument("-c1","--col_id",type=int,metavar="col number of id",help="specify  the end col number corresponding to the id")
+    parser.add_argument("-c2","--col_char",type=int,metavar="col number of char",help="specify  the end col number corresponding to the char to add")
+    parser.add_argument("-a","--add_sep",default="\t",help="specify the sep char added to the fasta id and the char to add")
+    #解析参数
+    all_args=parser.parse_args()
+    path_n=all_args.path
+    if path_n==".":
+        path_n=os.getcwd()
+    file1=all_args.file_char
+    fasta_file=all_args.fasta
+    sep_char=all_args.sep
+    start_line=all_args.start
+    end_line=all_args.end
+    col_id=all_args.col_id
+    col_char=all_args.col_char
+    add_sep=all_args.add_sep
+    #分析数据
+    dict_n=get_id_corres_info(path_n,file1,sep_char,start_line,end_line,col_id,col_char)
+    print "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",dict_n,len(dict_n)
+    edit_fasta_id(path_n,fasta_file,dict_n,add_sep)

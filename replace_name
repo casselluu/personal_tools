@@ -50,7 +50,10 @@ if __name__=="__main__":
             para[char_n.strip("-")]=argv[i+2]
     print para
     #获取path_name
-    path_n=para["path"]
+    if para["path"]==".":
+       path_n=os.getcwd()
+    else:
+        path_n=para["path"]
     #获取旧字符
     old_char=para["old"]
     #获取新字符

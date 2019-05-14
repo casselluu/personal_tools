@@ -1,0 +1,12 @@
+#!/usr/local/bin/python
+#coding=utf-8
+
+from hmmer_parser import *
+
+if __name__=="__main__":
+    #path_n=r"/home/fanxuezhe/files/Lping/2019/4_16/freq_analysis_result/freq_analysis"
+    #len_out=1
+    #freq_analysis_fasta_ID(path_n,len_out)
+    path_n=r"/home/fanxuezhe/files/Lping/2019/4_16/freq_analysis_result"
+    len_out=1
+    freq_analysis_fasta_ID(path_n,len_out)

@@ -1,0 +1,48 @@
+#!/usr/local/bin/python
+#coding=utf-8
+"""
+这个脚本的功能是比较两个文件的某个部分是否相同
+"""
+from hmmer_parser import *
+#这个function是十分特异的知识对于blastp的输出结果和fasta结果的比对
+#输入参数：文件所在的路径，两个需要比对的文件，file_1是fasta文件，file_2是blastp的输出文件
+#输出结果：不能匹配的行的名称
+def compare_files(path_n,file_1,file_2):
+    os.chdir(path_n)
+    file_1_list=[]
+    file_2_list=[]
+    with open(file_1,"r") as content1:
+        lines_all_1=content1.readlines()
+        for line_n in lines_all_1:
+            id_n=line_n.split("\t")[0]
+            file_1_list.append(id_n)
+    #print file_1_list
+    #file_2_dict=fasta2dict(path_n,file_2)
+    with open(file_2,"r") as content2:
+        lines_all_2=content2.readlines()
+        for line_n in lines_all_2:
+            if line_n.startswith(">"):
+                file_2_list.append(line_n.strip("\n"))
+    #        file_2_list.append(id_n)
+    #接下来进行比对
+    ##预定义一个数字变量用来调整两个之间的差量
+    #i=0
+    print "length",len(file_1_list),len(file_2_list)
+    for i in xrange(len(file_1_list)):
+        id_1=">"+file_1_list[i]
+        id_2=file_2_list[i]
+        if not id_1==id_2:
+           print id_1
+           print i
+           break
+        #2_id=file_2_list[i]
+        #检查fasta转化的字典中是否有这个键假如没有那么就把这个键输出出来
+    #    if not file_2_dict.has_key(_id):
+            #print _id
+
+if __name__=="__main__":
+    path_n=r"/home/fanxuezhe/files/test_file/blastp"
+    file_1="SCD2-V1-V2-VH_AA_VH_out.txt"
+    file_2="SCD2-V1-V2-VH_AA_VH.fasta" 
+    compare_files(path_n,file_1,file_2)
+

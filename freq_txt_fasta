@@ -1,0 +1,29 @@
+#!/usr/local/bin/python
+#coding=utf-8
+import os,argparse
+"""
+这个程序的功能是通过给定的freq.txt的多样性文件转化为fasta多样性文件（出现次数为id，序列为序列）
+"""
+def txt2fasta(path_n,txt_file):
+    os.chdir(path_n)
+    #打开文件，并且剔除第一和最后一列
+    all_lines=open(txt_file,"r").readlines()[1:-1]
+    #all_lines.close()
+    #新建文件并且把内容写入新的文件中
+    new_file_name=os.path.splitext(txt_file)[0]+".fasta"
+    new_file=open(new_file_name,"w")
+    for line_n in all_lines:
+        id_n,seq_n=line_n.strip("\n").split("\t")
+        new_file.write(">"+id_n+"\n"+seq_n+"\n")
+    new_file.close()
+if __name__=="__main__":
+    parser=argparse.ArgumentParser()
+    parser.add_argument("-p","--path",type=str,default=".",help="specify the path to the txt freq file")
+    parser.add_argument("-f","--file",type=str,help="specify the file that needed to be transformed to fasta")
+    all_args=parser.parse_args()
+    path_n=all_args.path
+    if path_n==".":
+        path_n=os.getcwd()
+    file_n=all_args.file
+    txt2fasta(path_n,file_n)
+    #path_n

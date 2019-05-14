@@ -1,0 +1,66 @@
+#!/usr/local/bin/python
+#coding=utf-8
+from hmmer_parser import *
+import argparse,os
+from Bio.Seq import Seq
+"""
+这个程序的主要功能是通过merge后的fasta文件，给定的id，获取从特定的引物序列之后截取的核苷酸序列
+"""
+#定义一个function,该function的功能是通过给定的路径和fasta文件获取所有正常序列的id
+#输入参数：需要获取对应id的fasta文件及其所在的路径
+#输出结果：返回含有所有id的列表
+def get_all_id_fasta(path_n,file_n):
+    os.chdir(path_n)
+    all_ids=[]
+    with open(file_n,"r") as content:
+        all_lines=content.readlines()
+        for line_n in all_lines:
+            if line_n.startswith(">"):
+                all_ids.append(line_n.strip("\n"))
+    print (len(all_ids),all_ids[0])
+    return all_ids
+#定义一个funtion,该function的功能是通过给定的merge后的fasta文件和引物对序列进行截取
+#输入参数：merge后的文件所在的路径及其名称，需要用来截取序列的引物
+#输出结果：新建一个fasta文件用来储存截取后的文件
+def get_cutted_seq(path_n,merged_file,primer_n,id_list):
+    os.chdir(path_n)
+    new_fasta=os.path.splitext(merged_file)[0]+"_cutted.fasta"
+    new_file=open(new_fasta,"w")
+    #将拼接后的fasta文件转化为字典
+    dict_fasta=fasta2dict(path_n,merged_file)
+    print (len(dict_fasta),dict_fasta.items()[0])
+    #遍历之前获取的id
+    for id_n in id_list:
+        if dict_fasta.has_key(id_n):
+            seq_n=dict_fasta[id_n]
+            seq_rev=str(Seq(seq_n).reverse_complement())
+            #利用引物对序列进行截取
+            if seq_n.find(primer_n)!=-1:
+                seq_x="".join(seq_n.split(primer_n)[1:])
+                new_file.write(id_n+"\n"+seq_x+"\n")
+            elif seq_rev.find(primer_n)!=-1:
+                seq_x="".join(seq_rev.split(primer_n)[1:])
+                new_file.write(id_n+"\n"+seq_x+"\n")
+            else:
+                print seq_n
+        #else:print id_n
+    new_file.close()
+    
+
+if __name__=="__main__": 
+    parser=argparse.ArgumentParser()
+    parser.add_argument("-p","--path",type=str,default=".",help="specify the path to the normal fasta file and the merged fasta file,default is .")
+    parser.add_argument("-mf","--merged_fasta",type=str,help="specify the merged fasta file")
+    parser.add_argument("-nf","--normal_fasta",type=str,help="specify the fasta file contained the normal fasta file(can tranlate to normal AA successfully)")
+    parser.add_argument("--primer",type=str,help="specify the primer used to cut the sequence")
+    all_args=parser.parse_args()
+    path_n=all_args.path
+    if path_n==".":
+        path_n=os.getcwd()
+    fasta_merged=all_args.merged_fasta
+    normal_fasta=all_args.normal_fasta
+    primer_n=all_args.primer
+    #接下来使用预定义的模块进行分析
+    id_list=get_all_id_fasta(path_n,normal_fasta)
+    get_cutted_seq(path_n,fasta_merged,primer_n,id_list)
+        

@@ -1,0 +1,95 @@
+#!/usr/local/bin/python
+#coding=utf-8
+"""
+该程序的功能是通过给定的旧的（可以是多个）和新的（可以是多个）的excel信息（标准的multi_tools输出的内容），计算出两个共有的序列并且放在exel信息中
+"""
+import os
+#定义一个function，该function的功能是通过给定的多个excel信息文件将这些文件合并为一个excel信息文件
+#输入参数：excel信息文件所在的文件夹，excel信息文件名称(列表形式)
+#输出结果：合并多个文件的新文件
+def combine_excel(path_n,excel_list):
+    os.chdir(path_n)
+    #预定义一个列表用来储存所有的文件读成的列表数据
+    all_excel_content=[]
+    for file_n in excel_list:
+        #首先判断这个文件是否存在
+        path_file=os.path.join(path_n,file_n)
+        if os.path.exists(path_file):
+            #读取文件并且储存在列表中
+            content_n=open(file_n,"r").readlines()
+            all_excel_content.append(content_n)
+    #接下来对每一个文件的内容列表进行遍历，将其中的内容进行合并,并且返回各个CDR和全序列的列表
+    ##首先需要确定合并后的文件的名称
+    new_file_name="combined_all_excel.txt"
+    while os.path.exists(os.path.join(path_n,new_file_name)):
+        new_file_name=os.path.splitext(new_file_name)[0]+"_new.txt" 
+    combined_file=open(new_file_name,"w")
+    ##预定义全序列和CDR序列的列表
+    all_seq_list=[]
+    ##预定义一个数字变量用来控制将其中一个文件的第一行写入这样就不用了在判断是全序列还是CDR序列的excel文件
+    i=1
+    ##遍历all_excel_content,把所有的序列放在列表中
+    for list_n in all_excel_content:
+        #去除文件的头和尾
+        header=list_n[0]
+        list_n=list_n[1:-1]
+        #第一个文件的第一行保留
+        if i==1:
+            #header=list_n[0]
+            combined_file.write(header)
+            i+=1
+        #将各个文件的序列写入新的文件中
+        for line_n in list_n:
+            #获取序列
+            seq_n=line_n.split("\t")[2]
+            all_seq_list.append(seq_n)
+            combined_file.write(line_n)
+    #最后根据序列列表的长度
+    combined_file.write(str(len(all_seq_list))+"\n")
+    combined_file.close()
+    #最终返回合并后的文件的名称，全部的序列列表
+    return new_file_name,all_seq_list
+#定义一个function，该function的功能是通过给定的两个excel信息文件，获取两者同时存在的序列，并且记录下来
+#输入参数：两个文件的序列列表，两个文件的路径和名称
+#输出结果：以后者的名称加上common.txt为名称创建文件，并且记录下来共有的序列
+def get_common_seq_excel(path_n,list_1,list_2,file_1,file_2):
+    #首先通过给定的两个序列列表信息找出两者同时具有的序列
+    print "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",len(list_1),len(list_2)
+    common_seq_list=list(set(list_2)-(set(list_2)-set(list_1)))
+    print "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",len(common_seq_list)
+    #定义新的文件的名称
+    new_file_name=os.path.splitext(file_2)[0]+"_common_seq.txt"
+    common_file=open(new_file_name,"w")
+    #获取两个文件的内容
+    file_2_list=open(file_2,"r").readlines()[1:-1]
+    file_1_list=open(file_1,"r").readlines()[1:-1]
+    #由于共同的文件需要加上两个文件的id（分为两列）
+    header=open(file_2,"r").readlines()[0].strip("\n")+"\t"+"origin_ids"+"\n"
+    common_file.write(header)
+    #将file_1,file_2转化为字典，键为序列，值为该行的所有值
+    file_1_dict={}
+    file_2_dict={}
+    for line_n in file_2_list:
+        seq_n=line_n.split("\t")[2]
+        file_2_dict[seq_n]=line_n
+    for line_n in file_1_list:
+        seq_n=line_n.split("\t")[2]
+        file_1_dict[seq_n]=line_n
+    print file_1_dict
+    #接下来通过共有的序列来提取信息，并且写入文件中
+    for seq_n in common_seq_list:
+        #利用common_seq_list中的序列来获取文件中的内容，并且提取相应的信息
+        line_2=file_2_dict[seq_n].strip("\n")
+        line_1=file_1_dict[seq_n]
+        ids_1=line_1.split("\t")[-1].strip("\n")
+        common_file.write(line_2+"\t"+ids_1+"\n")
+    common_file.close()
+if __name__=="__main__":
+    path_n=r"/home/fanxuezhe/files/test_file/common_seq_excel"
+    #path_n=r"/home/fanxuezhe/files/yanli/2019/4_26/reorganize/merge_excel_info"
+    file_old_list=["4_VK-P1_P2_CDR_info.txt","4_VL-P1_P2_CDR_info.txt"]
+    file_new_list=["4_VL-P1_P2_CDR_info.txt"]
+    file_name_old,list_seq_old=combine_excel(path_n,file_old_list)
+    file_name_new,list_seq_new=combine_excel(path_n,file_new_list)
+    get_common_seq_excel(path_n,list_seq_old,list_seq_new,file_name_old,file_name_new)
+    

@@ -1,0 +1,80 @@
+#!/usr/local/bin/python
+#coding=utf-8
+"""
+这个程序的主要目的是将一个物种的VH,VK,VL的formal序列合并起来
+"""
+import os,re
+from hmmer_parser import *
+#定义一个function，该function的功能是通过给定的路径，将路径中所有的去除特定字符后的配对文件以元组的形式放在列表中，并且把列表返回
+#输入参数：路径,压缩后的正则表达式
+#输出结果：一个字典（格式为{header:{file_1,file_2...file_n}}）
+def match_formal(path_n,regex_n):
+    #该变工作目录
+    os.chdir(path_n)
+    #获取文件夹中所有的文件名
+    files_all=os.listdir(path_n)
+    #预定义一个字典，该字典储存所有的含有同样物种名称的fasta文件（去除特定字符后含有同样名称）
+    same_spe={}
+    #对文件进行遍历
+    for file_n in files_all:
+        #print file_n
+        #假如文件以给定的字符串为结尾，那么就拿出来进行处理
+        matched_status=regex_n.search(file_n)
+        if matched_status:
+            #print file_n
+            #获取文件头
+            start_pos=matched_status.start()
+            #print start_pos
+            header=file_n[:start_pos]
+            # print header
+            #假如文件头已经在字典中了
+            if header in same_spe:
+                #print header,same_spe
+                #那么把当前这个文件添加到字典中
+                same_spe[header].append(file_n)
+                #print same_spe
+            #假如文件头没有在字典中
+            elif not header in same_spe:
+                #那么新建一个键，并且把值设为这个文件名的列表
+                same_spe[header]=[file_n]
+    #返回配对后的结果
+    return same_spe
+
+#定义一个function，该function的功能是通过给定的字典{header:[file_1,file_2]},将各个键对应的值中的文件合并到一个文件中
+#输入参数:一个以文件头为键，值为多个文件名
+#输出结果：以各个文件头命名的新文件，含有值中的各个文件的内容的合并
+def combine_file(path_n,dict_n):
+    os.chdir(path_n)
+    for header_n,files_all in dict_n.items():
+        #接下来新建文件夹，并且将所有的文件进行合并
+        combined_file=open("%s_all.fasta"%header_n,"w")
+        #将各个文件打开并且写入新的文件
+        for file_n in files_all:
+            with open(file_n,"r") as content:
+                all_seq=content.readlines()
+                for seq_n in all_seq:
+                    combined_file.write(seq_n)
+        combined_file.close()
+#定义一个function，该function的功能是将合并后的物种fasta文件拷贝到各个物种的数据库文件夹中
+#输入参数：无
+#输出结果：将all.fasta结尾的文件拷贝到目标文件夹中
+def cp_combined_file():
+    original_data_path=r"/home/fanxuezhe/files/blast_database_new/original_data"
+    type_char="all.fasta"
+    target_path=r"/home/fanxuezhe/files/blast_database_new/combined_data"
+    mk_dir="F"
+    cp_all_file(original_data_path,target_path,type_char,mk_dir)
+
+if __name__=="__main__":
+    regex_n=re.compile("_V[HKL]_formal\.fasta",re.I)
+    path_n=r"/home/fanxuezhe/files/blast_database_new/original_data"
+    dict_all=match_formal(path_n,regex_n)
+    print dict_all
+    combine_file(path_n,dict_all)
+    cp_combined_file()
+
+
+
+
+
+
