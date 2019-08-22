@@ -1,0 +1,870 @@
+#!/usr/local/bin/python
+#coding=utf-8
+'''
+该程序的主要目的是对给定的fasta文件进行框架分析
+'''
+from __future__ import division
+import os,re,argparse
+from NGS_data_process import *
+from hmmer_parser import *
+from align_own import *
+#from __future__ import division
+#定义一个function，该function的功能是通过给定的物种和轻重链的类型来获取框架的长id和短id
+#输入参数：物种，轻重链类型
+#输出结果：输出长、短框架的id
+def get_frame_id(species_n,ctype="all"):
+    #首先利用NGS_data_process中预定义的get_germline_db模块来获取数据库文件的绝对路径
+    db_file=get_germline_db(species_n,ctype)
+    #接下来获取所有的长、短id
+    long_ids,short_ids=get_germline(db_file)
+
+#定义一个function，该function的功能是通过给定的fasta文件进行blastp
+#输入参数：氨基酸的fasta文件名，fasta文件所在的绝对路径,物种类型，要分析的fasta文件的类型V/J,要分析的类型（all/H/L/K）,长ID（要根据其取出对应的序列）
+#输出结果：各个id的出现的多样性表格
+def record_id_freq(species_n,path_n,total_fasta,fasta_file,type_n=None,long_id=None,ctype="all"):
+    #首先根据物种的不同选择不同的id匹配的正则表达式
+    regular_species={"human_V":re.compile("[a-zA-Z]{4}[0-9]{1,2}[/]{0,1}[\w]{0,4}-[\w]{1,3}[-]{0,1}[0-9]{0,1}\*[0-9]{2}",re.I),
+                     "mouse_V":re.compile("[a-zA-Z]{4}[0-9]{1,2}[/]{0,1}[\w]{0,4}[*]{0,1}[-]{0,1}[\w]{1,3}[-]{0,1}[0-9]{0,1}[*]{0,1}[0-9]{1,2}",re.I),
+                     "rabbit_V":re.compile("[a-zA-Z]{4}[0-9]{1,2}[\w]{0,2}[*]{0,1}[0-9]{2}",re.I),
+                     "crab_eating_V":re.compile("[a-zA-Z]{4}[0-9]{1,2}[/]{0,1}[\w]{0,4}[-]{0,1}[\w]{1,3}[-]{0,1}[0-9]{0,1}\*[0-9]{2}",re.I),
+                     "rhesus_V":re.compile("[a-zA-Z]{4}[0-9]{1,2}[\w]{0,2}[-]{0,1}[0-9]{1,2}[*]{0,1}[0-9]{2}",re.I),
+                     "human_J":re.compile("IG[HKL]J[0-9]\*0[0-9]",re.I),
+                     "rhesus_J":re.compile("IG[HKL]J[0-9][-]{0,1}[0-9]{0,1}\*[0-9]{2}",re.I)}
+    species_n=species_n+"_"+type_n
+    pattern_long=regular_species[species_n]
+    #print (species_n)
+    pattern_short=re.compile("[A-Za-z]{4}[0-9]{1,2}")
+    os.chdir(path_n)
+    #获取数据库的文件
+    db_file=get_germline_db(species_n,ctype)
+    #print (db_file)
+    header=os.path.splitext(fasta_file)[0]
+    #新建一个文件用来储存最后的id的多样性的结果
+    result_freq=open("%s_germline_freq.txt"%header,"w")
+    result_freq.write("short_ids"+"\t"+"frequency"+"\n")
+    #print db_file,fasta_file,header
+    #print "blastp -db %s -query %s -outfmt 6 -max_target_seqs 1 -out %s_out.txt"%(db_file,fasta_file,header)
+    #指定blastp来检索，并且指定blast的输出文件
+    os.system("blastp -db %s -num_threads 6 -query %s -outfmt 6 -max_target_seqs 1 -max_hsps 1 -out %s_out.txt"%(db_file,fasta_file,header))
+    #利用预定义的get_all_id程序来提取所有的长短id
+    out_file="%s_out.txt"%header
+    all_long_id,all_short_id,id_seq_dict=get_all_ids(path_n,out_file,pattern_short,pattern_long)
+    #print all_long_id,all_short_id
+    #将长和短id的列表转化为字典，这个字典的键为id值为出现的次数，利用预定义的模块计算出现的次数后返回字典
+    short_id_dict,long_id_dict=count_freq_germ(path_n,out_file,all_short_id,all_long_id,pattern_short,pattern_long)
+    #依次遍历短id和长id的字典
+    for id_n,freq_n in short_id_dict.items():
+        result_freq.write(id_n+"\t"+str(freq_n)+"\n")
+    result_freq.write("long_ids"+"\t"+"frequency"+"\n")
+    for id_n,freq_n in long_id_dict.items():
+        result_freq.write(id_n+"\t"+str(freq_n)+"\n")
+    #检查是不是需要取出所有的指定的长id的序列
+    #print ("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",path_n,total_fasta,fasta_dict)
+    if  long_id:
+        dict_fasta=fasta_dict(path_n,total_fasta)
+        #print (dict_fasta)
+        #print (long_id)
+        all_id_list=id_seq_dict[long_id]
+        #print (id_seq_dict)
+        #print (all_id_list)
+        result_file_name="%s_same_germ.fasta"%header
+        result_file=open(result_file_name,"w")
+        for id_n in all_id_list:
+            final_id=">"+id_n
+            seq_n=dict_fasta[final_id]
+            result_file.write(final_id+"\r\n"+seq_n+"\r\n")
+#定义一个function，该function的功能失调通过给定的物种和轻重链的信息来获取其库文件
+#输入参数：物种，链的类型
+#输出结果：指定的物种和链的类型文件的绝对路径
+def get_germline_db(species_n,mode_n):
+    db_path=r"/home/fanxuezhe/files/blast_database_new/combined_data"
+    db_name="%s_%s.fasta"%(species_n,mode_n)
+    db_file=os.path.join(db_path,db_name)
+    return db_file
+#定义一个function，该function的功能是通过给定的fasta文件将其转化为一个字典
+#输入参数：fasta文件名，fasta所在的路径
+#输出结果：返回一个字典，键为ID，值为序列
+def fasta_dict(path_n,fasta_file):
+    os.chdir(path_n)
+    dict_fasta={}
+    seen_seq=[]
+    with open(fasta_file,"r") as content:
+        all_lines=content.readlines()
+        for i in xrange(len(all_lines)-1):
+            id_n=all_lines[i]
+            seq_n=all_lines[i+1].strip("\r\n")
+            if id_n.startswith(">"):
+                id_n=id_n.strip("\r\n")
+                if seen_seq.count(seq_n)==0:
+                    dict_fasta[id_n]=seq_n
+    return dict_fasta
+           
+#定义一个function,该function的功能是通过给定的列表，来获取列表中各个元素的重复次数，用字典的形式返回{id:次数}
+#输入参数：含有多个参数的列表
+#输出结果：一个字典{id:次数}
+def get_freq(list_n):
+    #预定义一个字典储存结果
+    dict_freq={}
+    #首先将列表转化为集合，再遍历集合中的元素
+    set_list=set(list_n)
+    for char_n in set_list:
+        num_char=list_n.count(char_n)
+        dict_freq[char_n]=num_char
+    #返回分析的结果
+    return dict_freq
+        
+
+#定义一个function,该function的功能是对blastp输出的结果进行分析，获取其中的长id和短id
+#输入参数：文件的绝对路径，blastp输出的文件名
+#输出结果：
+#注：这个程序主要是针对单行结果输出的文件进行解析，具体参数为：-max_target_seqs
+def get_all_ids(path_n,file_n,pattern_short,pattern_long):
+    #首先根据物种的不同选择不同的id匹配的正则表达式
+    #regular_species={"human":re.compile("[a-zA-Z]{4}[0-9]{1,2}[/]{0,1}[\w]{0,4}-[\w]{1,3}[-]{0,1}[0-9]{0,1}\*[0-9]{2}",re.I),
+    #                 "mouse":re.compile("[a-zA-Z]{4}[0-9]{1,2}[/]{0,1}[\w]{0,4}[*]{0,1}[-]{0,1}[\w]{1,3}[-]{0,1}[0-9]{0,1}[*]{0,1}[0-9]{1,2}",re.I),
+    #                 "rabbit":re.compile("[a-zA-Z]{4}[0-9]{1,2}[\w]{0,2}[*]{0,1}[0-9]{2}",re.I),
+    #                 "crab_eating":re.compile("[a-zA-Z]{4}[0-9]{1,2}[/]{0,1}[\w]{0,4}[-]{0,1}[\w]{1,3}[-]{0,1}[0-9]{0,1}\*[0-9]{2}",re.I),
+    #                 "rhesus":re.compile("[a-zA-Z]{4}[0-9]{1,2}[\w]{0,2}[-]{0,1}[0-9]{1,2}[*]{0,1}[0-9]{2}",re.I)}
+    #pattern_long=regular_species[species]
+    #pattern_short=re.compile("[A-Za-z]{4}[0-9]{1,2}")
+    os.chdir(path_n)
+    all_long_id=[]
+    all_short_id=[]
+    id_seq_dict={}
+    with open(file_n,"r") as content:
+        all_seq=content.readlines()
+        for seq_n in all_seq:
+            id_n=seq_n.split("\t")[0]
+            seq_n=seq_n.split("\t")[1]
+            
+            short_id,long_id=get_formal_germ_id(seq_n,pattern_short,pattern_long)
+            if id_seq_dict.get(long_id):
+                id_seq_dict[long_id].append(id_n)
+            elif not id_seq_dict.get(long_id):
+                id_seq_dict[long_id]=[id_n]
+            all_long_id.append(long_id)
+            all_short_id.append(short_id)
+    return all_long_id,all_short_id,id_seq_dict
+
+#定义一个function，该function的功能是通过给定的fasta文件将其划分为两个文件，一个是V基因文件，一个是J基因文件，这样方便用来提取含有相同的胚系基因的序列
+#输入参数：fasta文件以及fasta文件所在的路径
+#输出结果：将fasta文件分为两个（C-J）
+def divide_V_J(path_n,fasta_file):
+    os.chdir(path_n)
+    header=os.path.splitext(fasta_file)[0]
+    #print (header)
+    txt_name="%s_out.txt"%header
+    j_name="%s_j_gene.fasta"%header
+    v_name= "%s_v_gene.fasta"%header
+    #利用hmmscan进行分析并且利用hmmer_parser中的模块提取V/J序列
+    hmm_path=r"/home/fanxuezhe/files/hmm_library/all_hmm/ALL.hmm"
+    os.system("hmmscan --cpu 6 -o %s %s %s"%(txt_name,hmm_path,fasta_file))
+    dict_txt_fasta={txt_name:fasta_file}
+    #print ("dddddddddddddddddddddddddict_txt_fasta",dict_txt_fasta)
+    j_file=open(j_name,"w")
+    v_file=open(v_name,"w")
+    #scheme="KABAT" 
+    vj_seq=return_VJ_domain(path_n,dict_txt_fasta,"KABAT")
+    #print ("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",vj_seq)
+    for id_n,dict_info in vj_seq.items():
+        #print ("yyyyyyyyyyyyyyyyyyyy",id_n,dict_info)
+        j_seq=dict_info[0]["J"]
+        v_seq=dict_info[0]["V"]
+        j_file.write(">"+id_n+"\n"+j_seq+"\n")
+        v_file.write(">"+id_n+"\n"+v_seq+"\n")
+    v_file.close()
+    j_file.close()
+    
+
+#定义一个function，该function的功能是记录每一个根据CDR3的长度获取id
+#输入参数：备选的CDR3_formal_id的fasta文件，要筛选的CDR3的长度
+#输出结果：返回符合条件的IDs
+def screen_cdr3_len(path_n,fasta_file,cdr_file,candidate_fasta_len):
+    os.chdir(path_n)
+    #定义一个字典用来记录CDR的长度
+    len_cdr_dict={}
+    #定义一个字典用来记录CDR的序列
+    seq_cdr_dict={}
+    #首先将fasta文件转化为长度为键，值为id的字典
+    with open(cdr_file) as content:
+        all_lines=content.readlines()
+        for i in xrange(len(all_lines)-1):
+            id_n=all_lines[i].strip("\r\n")
+            cdr3_n=all_lines[i+1].strip("\r\n")
+            len_cdr3=len(cdr3_n)
+            if id_n.startswith(">"):
+                seq_cdr_dict[id_n]=cdr3_n
+                if len_cdr_dict.get(len_cdr3):
+                    len_cdr_dict[len_cdr3].append(id_n)
+                elif not len_cdr_dict.get(len_cdr3):
+                    len_cdr_dict[len_cdr3]=[id_n]
+    #接下来将对应长度的CDR3的全长的抗体序列写入文件中
+    all_fasta_dict=fasta_dict(path_n,fasta_file)
+    new_file=open("formal_cdr3_len.fasta","w")
+    all_ids=len_cdr_dict[candidate_fasta_len]
+    for id_n in all_ids:
+        seq_n=all_fasta_dict[id_n]
+        new_file.write(id_n+"\n"+seq_n+"\n")
+    new_file.close()
+    return seq_cdr_dict 
+
+#定义一个function，该function的功能是通过给定的CDR3的fasta文件，返回其CDR3的长度
+#输入参数：CDR3的fasta文件及其所在的路径
+#输出结果：返回CDR3的长度
+def get_cdr3_len(path_n,cdr3_fasta):
+    os.chdir(path_n)
+    cdr3_len=0
+    with open(cdr3_fasta,"r") as content:
+        all_lines=content.readlines()
+        cdr3_seq=all_lines[1].strip("\r\n")
+        cdr3_len=len(cdr3_seq)
+    return cdr3_len,cdr3_seq
+
+#定义一个function，该function的功能是通过备选序列对fasta文件进行分析，找出同胚系基因
+#输入参数：fasta文件名，备选序列，
+#输出结果：提取后的序列的fasta文件名
+def get_matched_VJ_fasta(path_n,fasta_file,candidate_seq,chain_type):
+    os.chdir(path_n)
+    ##首先将备选序列写入一个文件中
+    #首先获取备选序列的胚系基因的类型
+    candidate_file=open("candidate_seq.fasta","w")
+    candidate_file.write(">"+"candidate_seq"+"\n"+candidate_seq)
+    #candidate_file.write(">"+"candidate_seq"+"\n"+candidate_seq+"\n"+">"+"candidate_seq"+"\n"+candidate_seq+"\n"+">"+"candidate_seq"+"\n"+candidate_seq+"\n"+">"+"candidate_seq"+"\n"+candidate_seq+"\n"+">"+"candidate_seq"+"\n"+candidate_seq+"\n")
+    candidate_file.close()
+    
+    #将备选序列分割为V/J基因序列，分别获取V和J的胚系基因的类型
+    divide_V_J(path_n,"candidate_seq.fasta")
+    ###首先获取备选序列的胚系基因的类型
+    record_id_freq(species_n,path_n,fasta_file,"candidate_seq_v_gene.fasta","V")
+    record_id_freq(species_n,path_n,fasta_file,"candidate_seq_j_gene.fasta","J")
+    cand_v_germ=""
+    cand_j_germ=""
+   
+    #print ("xxxxxxxxxxxxxxxxxxxxxxxxxxx")
+    with open("candidate_seq_v_gene_germline_freq.txt","r") as content:
+	cand_v_germ=content.readlines()[3].split("\t")[0]
+    with open("candidate_seq_j_gene_germline_freq.txt","r") as content:
+	cand_j_germ=content.readlines()[3].split("\t")[0]
+    #print (cand_v_germ,cand_j_germ)
+    if not chain_type:
+        chain_type="V"+(cand_v_germ[2]).upper()
+        #print ("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",chain_type)
+    #接下来对fasta文件进行分析
+    header=os.path.splitext(fasta_file)[0]
+    #首先区分V基因和J基因
+    divide_V_J(path_n,fasta_file)
+    #接下来对V基因和J基因分别进行blast分析
+    #j_fasta="%s_j_gene.fasta"%header
+    v_fasta="%s_v_gene.fasta"%header
+    #print ("yyyyyyyyyyyyyyyyyyyyyy",species_n,path_n,fasta_file,v_fasta,cand_v_germ)
+    record_id_freq(species_n,path_n,fasta_file,v_fasta,"V",cand_v_germ)
+    #首先找出符合V区域的序列，接下来再从中找出符合J区域的序列
+    v_1st_fasta="%s_v_gene_same_germ.fasta"%header
+    divide_V_J(path_n,v_1st_fasta)
+    v_1st_remain_fasta="%s_v_gene_same_germ_j_gene.fasta"%header
+    record_id_freq(species_n,path_n,v_1st_fasta,v_1st_remain_fasta,"J",cand_j_germ)
+    #记录分析后的fasta文件的名称（能够同时匹配V/J基因型）
+    second_fasta="%s_v_gene_same_germ_j_gene_same_germ.fasta"%header
+    #新建一个文件用来进行下一步的分析（CDR3长度）
+    cdr3_folder="%s_HCDR3_len"%header
+    if os.path.exists(cdr3_folder):
+	os.system("rm -rf %s"%cdr3_folder)
+    path_cdr3=os.path.join(path_n,cdr3_folder)
+    path_screening=os.path.join(path_cdr3,"cdr_%s_len_screening"%chain_type)
+    path_candidate_screening=os.path.join(path_cdr3,"candidate_seq")
+    os.mkdir(path_cdr3)
+    os.mkdir(path_screening)
+    os.mkdir(path_candidate_screening)
+    new_file_name="cdr_%s_len_screening.fasta"%chain_type
+    cdr_len_fasta1=os.path.join(path_n,cdr3_folder,"cdr_%s_len_screening"%chain_type,new_file_name)
+    cdr_len_fasta2=os.path.join(path_n,path_screening,new_file_name)
+    shutil.copyfile(second_fasta,cdr_len_fasta1) 
+    shutil.copy(second_fasta,path_screening)
+    shutil.copyfile("candidate_seq.fasta",os.path.join(path_candidate_screening,"candidate_%s_seq.fasta"%chain_type))
+    #接下来统计CDR的长度信息
+    ###首先按照按照按照氨基酸进行分析提取CDR
+    os.chdir(cdr3_folder)
+    os.system("AA_fasta_analysis NGS --scheme KABAT")
+    #将formal_id的fasta文件拷贝到当前文件夹下
+    ####根据链的类型确定fromal_id所处的位置
+    chain_type_L=""
+    if chain_type!="VH":
+	chain_type_L="VL"
+    formal_id_fasta_name="cdr_%s_len_screening_CDR_sequences_CDR3_only_edited_id.fasta"%chain_type
+    if chain_type_L:
+        formal_id_folder=os.path.join(path_cdr3,"all_match_file",chain_type_L,"%s_CDR3"%chain_type_L,"formal_id")
+    elif not chain_type_L:
+        formal_id_folder=os.path.join(path_cdr3,"all_match_file",chain_type,"%s_CDR3"%chain_type,"formal_id")
+    cdr3_len,cdr3_seq=get_cdr3_len(formal_id_folder,"candidate_%s_seq_CDR_sequences_CDR3_only_edited_id.fasta"%chain_type)
+    #print ("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",cdr3_len)
+     #
+    shutil.copy(os.path.join(formal_id_folder,formal_id_fasta_name),path_screening)
+    seq_cdr_dict=screen_cdr3_len(path_screening,new_file_name,formal_id_fasta_name,cdr3_len)
+    #返回符合CDR3长度要求的字典（键为ID，值为CDR3序列），链的类型（VH/VL,VK变为了VL），备选序列的CDR3序列,新得到的全序列的fasta文件和其所在的路径
+    return seq_cdr_dict,chain_type,cdr3_seq,"formal_cdr3_len.fasta",path_screening
+    ###再次新建一个文件夹用来进行序列一致性的分析
+#定义一个function，该function的功能是通过给定的字符和列表中的字符进行对比，假如有重复的那么就添加一个特定的字符，重新命名
+#输入参数：字符的列表以及备选字符
+#输出结果：不与列表中的字符相同的字符
+def find_new_id(id_list,candidate_id):
+    new_id=""
+    if id_list.count(candidate_id)>0:
+       candidate_id=candidate_id+"_new"
+       new_id=find_new_id(id_list,candidate_id)
+    elif id_list.count(candidate_id)==0:
+       new_id=candidate_id
+    return new_id
+
+
+#定义一个function，该function的功能是通过给定的
+#输入参数：输入两个序列(序列1为目标序列，序列2为备选序列)
+#输出结果：返回两个序列的一致性
+def get_confidence(seq_1,seq_2):
+    #首先新建一个文件夹，数据分析将来会在这个文件夹中进行
+    folder_name="confidence_process_folder"
+    ##找出与当前文件夹下所有文件都不同哥的名字来名新建的文件夹
+    path_now=os.getcwd()
+    all_files=os.listdir(path_now)
+    #new_folder_name=find_new_id(all_files,folder_name)
+    new_folder_name=folder_name
+    if os.path.exists(new_folder_name):
+        os.system("rm -r %s"%new_folder_name)
+    #print ("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",all_files,new_folder_name)
+    os.mkdir(new_folder_name)
+    os.chdir(new_folder_name)
+    #将两个序列写成两个fasta文件
+    seq_1_file=open("sequence_1.fasta","w")
+    seq_1_file.write(">sequence_1"+"\n"+seq_1+"\n"+">sequence_2"+"\n"+seq_2+"\n")
+    seq_1_file.close()
+   
+    #接下来对两个序列进行比对
+    path_n=os.path.join(path_now,new_folder_name)
+    clustalw_align_alone(path_n,"sequence_1.fasta")
+    dict_aln=parse_aln_file(path_n,"sequence_1.aln")
+    seq_1=dict_aln["sequence_1"]
+    seq_2=dict_aln["sequence_2"]
+    #print ("222222222222222222222222222222222222",seq_1,seq_2)
+    seq_1_list=list(seq_1)
+    seq_2_list=list(seq_2)
+    #对比各个位置的字符
+    ###预定一个变量用来记录所有相同的字符的数量
+    same_num=0
+    total_num=len(seq_1_list)
+    for i in xrange(len(seq_1_list)):
+        char_1_n=seq_1_list[i]
+        char_2_n=seq_2_list[i]
+        if char_1_n==char_2_n:
+            same_num+=1
+    #计算一致性
+    #print ("11111111111111111111111111111111111",same_num,total_num)
+    confidence_n=same_num/total_num
+    return confidence_n
+    
+#定义一个function，该function的功能是通过给定的aln(clustalw输出的文件)获取到每一个ID对应的序列
+#输入参数：aln文件及其所在的路径
+#输出结果：输出一个字典，键为ID，值为比对后的序列
+def parse_aln_file(path_n,aln_file):
+    os.chdir(path_n)
+    #定义一个空字典用来储存数据
+    id_seq_dict={}
+    with open(aln_file,"r") as content:
+        all_lines=content.readlines()
+        for line_n in all_lines:
+            if not line_n.startswith("   "):
+                id_n=line_n.split(" ")[0]
+                seq_n=line_n.split(" ")[-1].strip("\r\n")
+                if id_seq_dict.get(id_n):
+                    id_seq_dict[id_n]=id_seq_dict[id_n]+seq_n
+                elif not id_seq_dict.get(id_n):
+                    id_seq_dict[id_n]=seq_n
+    return id_seq_dict
+#定义一个function，该function的功能是通过给定的number_anti的输出文件将其中的位置信息和氨基酸信息对应起来
+#输入参数：输出的文件名以及所在的路径
+#输出结果：返回一个字典，键为ID，值为一个字典，键为编号，值为氨基酸
+def parse_numbered_seq(path_n,numbered_file):
+    os.chdir(path_n)
+    #定义一个字典用来储存总的数据
+    dict_id_number_aa={}
+    with open(numbered_file,"r") as content:
+        all_lines=content.readlines()
+        for i in xrange(len(all_lines)-2):
+            id_n=all_lines[i].strip("\r\n")
+            number_n=all_lines[i+1]
+            AA_n=all_lines[i+2]
+            #print ("Allllllllllllllllllllllllllllllllllllllllllllllll",number_n)
+            if id_n.startswith(">"):
+                dict_seq_n={}
+                number_all=number_n.split("\t")
+                
+                aa_all=AA_n.split("\t")
+                #print (number_all,aa_all)
+                for i in xrange(len(number_all)):
+                    #print (i,id_n)
+                    #print (number_all)
+                    #print (aa_all)
+                    #print ("xxxxxxxxxxxxxxxxxxxxxxxx",len(number_all),len(aa_all))
+                    num_n=number_all[i].strip("\r\n")
+                    aa_n=aa_all[i].strip("\r\n")
+                    dict_seq_n[num_n]=aa_n
+                
+                dict_id_number_aa[id_n]=dict_seq_n
+    return dict_id_number_aa
+                    
+#定义一个function，该function的功能进行fasta的最小重复值序列的筛选（即最低重复多少次），是通过给定的fasta文件筛选出一个新的fasta文件
+#输入参数：fasta文件机器所在路径,最低的重复次数
+#输出结果：新建一个fasta文件，该fasta文件含有超过给定的重复次数的序列
+def get_more_freq_seq(path_n,fasta_file,minimum_num):
+    os.chdir(path_n)
+    #首先进行多样性分析（带有ID）
+    os.system("seq_analysis freq_id %s"%fasta_file)
+    #随后对输出的多样性文件进行分析
+    ####首先确定输出文件的名称
+    header=os.path.splitext(fasta_file)[0]
+    out_file="%s_freq.txt"%header
+    #新建一个文件用来储存重复次数超过指定的数量的序列
+    rep_more_file_name="%s_rep_mt_%s.fasta"%(header,str(minimum_num))
+    more_than_file=open(rep_more_file_name,"w")
+    with open(out_file,"r") as content:
+        all_lines=content.readlines()[1:-1]
+        for line_n in all_lines:
+            freq_n=line_n.split("\t")[0]
+            seq_n=line_n.split("\t")[1]
+            all_ids=line_n.split("\t")[2]
+            #取出第一个ID作为新的fasta文件的ID
+            first_id=all_ids.strip("\r\n").split(" ")[0]
+            #假如重复次数大于一定的数值
+            #print (freq_n)
+            if int(freq_n)>=minimum_num:
+                #将这个序列写入文件
+                more_than_file.write(">"+first_id+"\n"+seq_n+"\n")
+    more_than_file.close()
+    return rep_more_file_name
+
+#定义一个function，该function的功能是通过氨基酸的fasta文件进行CDR的提取（合并kabat，IMGT）包括Vernier区域，并且进行多样性分析，提取出含有唯一的CDR
+#输入参数：fasta文件名称及其所在的路径
+#输出结果：提取最长的CDR并且进行多样性的分析
+def get_unique_cdr_fasta(path_n,fasta_file,chain_type,position_list,minimum_rep):
+    os.chdir(path_n)
+    header=os.path.splitext(fasta_file)[0]
+    #新建一个文件夹用来进行数据分析
+    path_store_unique_cdr=os.path.join(path_n,"%s_unique_cdr"%header)
+    if os.path.exists(path_store_unique_cdr):
+        os.system("frm %s"%path_store_unique_cdr)
+    os.mkdir(path_store_unique_cdr)
+    #将fasta文件拷贝到这个文件夹中
+    shutil.copy(fasta_file,path_store_unique_cdr)
+    #接下来进行从氨基酸序列开始的CDR提取(不用指定提取的编号方式，默认为最长的编号方式)
+    os.system("AA_fasta_analysis NGS")
+    #找出CDR文件所处的地方
+    path_cdr_edited_id=os.path.join(path_n,"all_match_file","VH_VL_file","combined_VH_VL")
+    #确定修改过ID的fasta文件的名称
+    header=os.path.splitext(fasta_file)[0]
+    edited_id_file="%s_CDR_sequences_edited_id.fasta"%header
+    #将原始的fasta文件拷贝到编辑完ID的文件夹中去
+    os.chdir(path_store_unique_cdr)
+    shutil.copy(fasta_file,path_cdr_edited_id)
+    #接下来进行多样性分析
+    os.chdir(path_cdr_edited_id)
+    #接下来提取vernier区域的序列
+    vernier_fasta=get_pos_aa(path_cdr_edited_id,fasta_file,position_list)
+    #print ("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",vernier_fasta)
+    #将两个文件合并（vernier和fasta文件）
+    vernier_dict=fasta_dict(path_cdr_edited_id,vernier_fasta)
+    #新建一个文件用来记录合并后的序列
+    cdr_header=os.path.splitext(edited_id_file)[0]
+    combine_vernier_cdr_name="%s_with_vernier.fasta"%cdr_header
+    combine_vernier_cdr_file=open(combine_vernier_cdr_name,"w")
+    with open(edited_id_file,"r") as content:
+        all_lines=content.readlines()
+        for i in range(len(all_lines)-1):
+            id_n=all_lines[i].strip("\r\n")
+            seq_n=all_lines[i+1].strip("\r\n")
+            if id_n.startswith(">"):
+                vernier_seq=vernier_dict[id_n]
+                if chain_type=="VK" or chain_type=="VL":
+                    fr2_part=vernier_seq[:9]
+                    fr3_part=vernier_seq[9:]
+                    combined_seq=seq_n.split(" ")[0]+" "+fr2_part+" "+seq_n.split(" ")[1]+" "+fr3_part+" "+seq_n.split(" ")[2]
+                    combine_vernier_cdr_file.write(id_n+"\n"+combined_seq+"\n")
+                elif chain_type=="VH":
+                    fr1_part=vernier_seq[:1]
+                    fr2_part=vernier_seq[1:7]
+                    fr3_part=vernier_seq[7:]
+                    combined_seq=fr1_part+" "+seq_n.split(" ")[0]+" "+fr2_part+" "+seq_n.split(" ")[1]+" "+fr3_part+" "+seq_n.split(" ")[2]
+                    combine_vernier_cdr_file.write(id_n+"\n"+combined_seq+"\n")
+    combine_vernier_cdr_file.close()
+    os.system("seq_analysis freq_id %s"%combine_vernier_cdr_name)
+    ####接下来提取唯一出现的CDR的氨基酸序列
+    #定义一个列表用来储存所有的唯一出现的ID
+    unique_id_list=[]
+    with open("%s_CDR_sequences_edited_id_with_vernier_freq.txt"%header,"r") as content:
+        all_lines=content.readlines()[1:-1]
+        for line_n in all_lines:
+            id_n=line_n.split("\t")[2].strip("\r\n").split(" ")[0]
+            rep_n=line_n.split("\t")[0]
+            if int(rep_n)>=minimum_rep:
+                unique_id_list.append(id_n)
+    #接下来将fasta文件转化为字典，利用获取到的ID列表取出序列并且写在文件中
+    os.chdir(path_n)
+    unique_cdr_file=open("%s_unique_cdr.fasta"%header,"w")
+    fasta_dict_n=fasta_dict(path_n,fasta_file)
+    #遍历ID并且将获得的序列写入新的fasta文件中
+    for id_n in unique_id_list:
+        if fasta_dict_n.get(">"+id_n):
+            seq_n=fasta_dict_n[">"+id_n]
+            unique_cdr_file.write(">"+id_n+"\n"+seq_n+"\n")
+        else:print ("nnnnnnnnnnnnnnnnnnnnnooooooooooooo   seq")
+    unique_cdr_file.close()
+    return "%s_unique_cdr.fasta"%header
+    #
+     
+#定义一个function，该function的功能是通过给定的fasta文件和需要取出的位置的列表，从而得到对应的序列，并且以fasta的格式保存
+#输入参数：fasta文件及其路径，位置列表
+#输出结果：一个fasta文件，ID与fasta文件对应，序列值列表中指定的位置的氨基酸
+def get_pos_aa(path_n,fasta_file,pos_list):
+    os.chdir(path_n)
+    #print ("aaaaaaaaaaaaaaaaaaaaaaaaaaa",path_n,fasta_file,pos_list)
+    #首先利用预定义的程序来获取编号
+    os.system("number_anti -f %s --scheme Kabat"%fasta_file)
+    numbered_file=os.path.splitext(fasta_file)[0]+".txt"
+    #将结果文件解析为字典
+    dict_id_numbered_seq=parse_numbered_seq(path_n,numbered_file)
+    #遍历字典，取出对应位置的氨基酸并且写到文件中
+    header=os.path.splitext(fasta_file)[0]
+    select_pos_file=open("%s_select_pos_record.fasta"%header,"w")
+    for id_n,dict_pos_aa in dict_id_numbered_seq.items():
+        #根据给出的位置列表分别取出氨基酸的类型
+        #与定义一个字符串用来记录各个位置的氨基酸
+        all_pos_aa=""
+        for pos_n in pos_list:
+            
+            aa_n=dict_pos_aa[str(pos_n)]
+            all_pos_aa+=aa_n
+        select_pos_file.write(id_n+"\n"+all_pos_aa+"\n")
+    select_pos_file.close()
+    return "%s_select_pos_record.fasta"%header
+#定义一个function，通过给定的序列从fasta文件中找出与其一致的序列，并且保存为新的fasta文件
+#输入参数：fasta文件及其路径，备选的序列
+#输出结果：一个fasta文件（序列与备选序列相同）
+def get_same_seq_fasta(path_n,total_fasta,fasta_file,candidate_seq):
+    os.chdir(path_n)
+    total_fasta_dict=fasta_dict(path_n,total_fasta)
+    header=os.path.splitext(fasta_file)[0]
+    matched_seq_name="%s_match_candidate.fasta"%header
+    matched_seq_file=open(matched_seq_name,"w")
+    with open(fasta_file,"r")  as content:
+        all_lines=content.readlines()
+        for i in range(len(all_lines)-1):
+            id_n=all_lines[i].strip("\r\n")
+            seq_n=all_lines[i+1].strip("\r\n")
+            if id_n.startswith(">") and seq_n==candidate_seq:
+                new_seq=total_fasta_dict[id_n]
+                matched_seq_file.write(id_n+"\n"+new_seq+"\n")
+    matched_seq_file.close()
+                
+#定义一个function，该function的功能是通过给定的多样性的文件和fasta文件，取出一个多样性中的惟一的序列
+#输入参数：fasta文件及其所在的路径，
+#输出结果：新的fasta文件，ID为每一个多样性中抽取出来的ID
+def get_unique_freq_seq(path_n,fasta_file,freq_file):
+    os.chdir(path_n)
+    dict_fasta_file=fasta_dict(path_n,fasta_file)
+    #定义一个新的文件的名称
+    header=os.path.splitext(fasta_file)[0]
+    corres_file=open("%s_corres_freq.fasta"%header,"w")
+    with open(freq_file,"r") as content:
+        all_lines=content.readlines()
+        for line_n in all_lines[1:-1]:
+            id_n=line_n.split("\t")[-1].strip("\r\n").split(" ")[0]
+            seq_n=dict_fasta_file[id_n]
+            corres_file.write(id_n+"\n"+seq_n+"\n")
+    corres_file.close()
+
+
+#定义一个function，该function的功能是通过给定的多样性的输出文件获取对应的序列
+#输入参数：多样性文件名称及其路径
+#输出结果：一个fasta文件
+
+def get_unique_vernier(path_n,freq_file):
+    os.chdir(path_n)
+    header=os.path.splitext(freq_file)[0]
+    #接下来新建一个fasta文件用来储存新的
+#定义一个function，该function的功能是通过给定的氨基酸序列和指定的位置（以及编号，对其进行提取该位置的氨基酸）
+#输入参数：氨基酸序列，指定的位置列表和编号系统
+#输出结果：返回这些位置分别对应的氨基酸类型
+#def get_corres_pos_AA(AA_seq,pos_list,scheme="IMGT"):
+
+if __name__=="__main__":
+    parser=argparse.ArgumentParser()
+    parser.add_argument("-p","--path",type=str,default=".",metavar="path to fasta",help="specify the path of the fasta")
+    parser.add_argument("species",type=str,default="human",choices=["human","mouse","rabbit","rhesus","crab_eating"])
+    parser.add_argument("-c","--candidate",default=None,type=str,help="specify the sequence of candidate")
+    parser.add_argument("-f","--fasta",default=None,type=str,help="specify the fasta file that need to be grep the seq has same germ with the candidate")
+    parser.add_argument("-hp","--h_position",default=[24,37,39,45,47,48,49,71,73,76,78,91],nargs="*",help="specify the heavy position that need to be catch(KABAT)")
+    parser.add_argument("-lp","--l_position",default=[35,36,38,43,44,46,47,48,49,71,87],nargs="*",help="specify the light position that need to be catch(KABAT)")
+    parser.add_argument("-ct","--chain_type",default=None,choices=["VH","VK","VL"],type=str,help="specify the chain type")
+    parser.add_argument("-r","--repeat",type=int,default=3,help="specify the minumu number that used to screen sequence repeatition")
+    parser.add_argument("-ps","--position_select",type=str,nargs="*",help="specify the position that selected in the mutated CDR region")
+    #parser.add_argument("")
+    #获取所有的参数
+    all_args=parser.parse_args()
+    path_n=all_args.path
+    if path_n==".":
+        path_n=os.getcwd()
+    species_n=all_args.species
+    h_position_list=all_args.h_position
+    l_position_list=all_args.l_position
+    #for i in position_list:
+    #    print (i)
+    #path_n=r"/home/fanxuezhe/files/test_file/blastp"
+    #species_n="human"
+    candidate_seq=all_args.candidate
+    fasta_file=all_args.fasta
+    chain_type=all_args.chain_type
+    rep_num=all_args.repeat
+    position_select=all_args.position_select
+    #首先将fasta文件转化为字典
+    #all_fasta_dict=fasta_dict(path_n,fasta_file)
+    #首先第一步利用给定的抗体序列得到相同胚系基因和HCDR3长度的抗体序列,并且得到对应的CDR3的ID和序列
+    
+    seq_cdr_dict,chain_type,candidate_cdr,newer_fasta,path_screening=get_matched_VJ_fasta(path_n,fasta_file,candidate_seq,chain_type)
+    
+    #接下来对新得到的fasta序列进行编号
+    os.chdir(path_n)
+    
+    path_new=os.path.join(path_n,"get_numbering_dict")
+    
+    if os.path.exists(path_new):
+        os.system("rm -rf get_numbering_dict")
+    os.mkdir(path_new)
+    
+    
+    newer_fasta="formal_cdr3_len.fasta"
+    #path_screening=r"/home/fanxuezhe/files/test_file/divide_VJ/NGS_divide_VJ/VK_AA_HCDR3_len/cdr_VK_len_screening"
+    #path_screening=r"/home/fanxuezhe/files/yanli/2019/NGS_7_26_051602/germline_seq_search/VH_R1_out_merged_new_AA_HCDR3_len/cdr_VH_len_screening"
+    
+    ####将符合CDR3长度的序列拷贝到当前文件夹中
+    os.chdir(path_screening)
+    shutil.copy(newer_fasta,path_new)
+    #将备选序列的fasta文件拷贝到当前目录中
+    os.chdir(path_n)
+    shutil.copy("candidate_seq.fasta",path_new)
+    os.chdir(path_new)
+    os.system("number_anti -f %s --scheme Kabat"%newer_fasta)
+    os.system("number_anti -f candidate_seq.fasta --scheme Kabat")
+    #接下来解析编号的结果文件
+    all_seq_result=os.path.splitext(newer_fasta)[0]+".txt"
+    dict_all_seq=parse_numbered_seq(path_new,all_seq_result)
+    dict_candidate=parse_numbered_seq(path_new,"candidate_seq.txt")
+    #print ("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",dict_candidate,dict_all_seq)
+    ####首先解析备选序列的编号文件
+    #chain_type="VK"  
+    #cdr3_len=9 
+
+   
+    #formal_id_fasta_name="cdr_%s_len_screening_CDR_sequences_CDR3_only_edited_id.fasta"%chain_type
+    
+    #new_file_name="cdr_%s_len_screening.fasta"%chain_type
+    #cdr3_len=8
+    #seq_cdr_dict=screen_cdr3_len(path_screening,new_file_name,formal_id_fasta_name,cdr3_len)
+    
+    #chain_type="VH"
+    #candidate_cdr="RAGPPGLS"
+    #chain_type="VK"
+    #接下来根据轻链和重链的类型分别进行筛选
+    #假如是重链那么就按照重链的CDR3的序列一致性进行筛选
+    
+    if chain_type=="VH":
+        #新建一个文件夹用于序列的一致性的筛选
+        confid_id="VH_confidence_screening"
+        all_file_list=os.listdir(path_n)
+        new_confid_id=find_new_id(all_file_list,confid_id)
+        path_confid=os.path.join(path_n,new_confid_id)
+        os.mkdir(path_confid)
+        #转移到新的目录中进行筛选
+        os.chdir(path_confid)
+        all_fasta_dict=fasta_dict(path_screening,newer_fasta)
+        os.chdir(path_confid)
+        #定义一个文件用来记录符合一致性要求的序列
+        confid_name="VH_sequences_with_confidence.fasta"
+        confid_file=open(confid_name,"w")
+        for id_n,cdr3_n in seq_cdr_dict.items():
+            os.chdir(path_confid)
+            #对每一个CDR3和备选的CDR3进行一致性分析
+            confid_n=get_confidence(candidate_cdr,cdr3_n)
+            if confid_n>0.6:
+                #print ("xxxxxxxxxxxxxxxxxxxxxxxxxxx",id_n,all_fasta_dict)
+                #print (id_n,fasta_dict)
+                if all_fasta_dict.get(id_n): 
+                    seq_n=all_fasta_dict[id_n]
+                 
+                    confid_file.write(id_n+"\n"+seq_n+"\n")
+        confid_file.close()
+        #接下来进行去除重复氨基酸序列等过程
+        file_n=confid_name
+        rep_more_file_name=get_more_freq_seq(path_confid,confid_name,rep_num)
+        #vl_pos_folder=os.path.join(path_n,"VL_pos")
+        unique_cdr_fasta=get_unique_cdr_fasta(path_confid,rep_more_file_name,chain_type,h_position_list,1)
+        #get_pos_aa(vl_pos_folder,unique_cdr_fasta,l_position_list)
+    #假如链的类型为轻链
+    elif chain_type=="VL" or chain_type=="VK":
+        #首先获取指定位置的氨基酸
+        selected_pos_aa=[]
+        for pos_n in position_select:
+            select_n=dict_candidate[">candidate_seq"][pos_n]
+            selected_pos_aa.append(select_n)
+            #candidate_95=dict_candidate[">candidate_seq"]["95"]
+            #candidate_96=dict_candidate[">candidate_seq"]["96"]
+        #遍历所有的输出结果
+        dict_newer_fasta=fasta_dict(path_new,newer_fasta)
+        os.chdir(path_n)
+        path_vl_pos=os.path.join(path_n,"VL_pos")
+        if os.path.exists("VL_pos"):
+            os.system("rm -rf VL_pos")
+        os.mkdir(path_vl_pos)
+        os.chdir(path_vl_pos)
+        match_pos_file=open("VL_matched_pos.fasta","w")
+        for id_n,dict_pos_aa in dict_all_seq.items():
+            all_pos_select=[]
+            for pos_n in position_select:
+                #print ("diddddddddddddddddddict",dict_pos_aa)
+                if dict_pos_aa.get(pos_n):
+                    select_n=dict_pos_aa[pos_n]
+                    all_pos_select.append(select_n)
+                #aa_95=dict_pos_aa["95"]
+                #aa_96=dict_pos_aa["96"]
+                #print("xxxxxxxxxxxxxxxxxxxxxxxx",aa_95,aa_96,candidate_95,candidate_96)
+            #if aa_95==candidate_95 and aa_96==candidate_96:
+            if "".join(selected_pos_aa)=="".join(all_pos_select):
+                seq_n=dict_newer_fasta[id_n]
+                match_pos_file.write(id_n+"\n"+seq_n+"\n")
+        match_pos_file.close()
+    
+   
+        #确定目标的文件夹路径
+        vl_pos_folder=os.path.join(path_n,"VL_pos")
+        file_n="VL_matched_pos.fasta"
+        rep_more_file_name=get_more_freq_seq(vl_pos_folder,file_n,rep_num)
+        #chain_type="VK"
+        unique_cdr_fasta=get_unique_cdr_fasta(vl_pos_folder,rep_more_file_name,chain_type,l_position_list,1)
+    
+    #vl_pos_folder=os.path.join(path_n,"VL_pos")
+    #file_n="VL_matched_pos.fasta"
+    #rep_more_file_name=get_more_freq_seq(vl_pos_folder,file_n,1)
+    #chain_type="VK"
+    #unique_cdr_fasta=get_unique_cdr_fasta(vl_pos_folder,rep_more_file_name,chain_type,l_position_list,rep_num)
+    #接下来根据给定的框架区域的序列提取
+    #首先提取备选序列的这些位置的氨基酸
+    #os.chdir(path_n)
+    #shutil.copy("candidate_seq.fasta",vl_pos_folder)
+    #pos_aa_candidate=get_pos_aa(vl_pos_folder,"candidate_seq.fasta",l_position_list)
+    #获取备选序列的这些位置的氨基酸序列
+    #candidate_seq_pos=""
+    #print (pos_aa_candidate)
+    #with open(pos_aa_candidate,"r") as content:
+#	 candidate_seq_pos=content.readlines()[1].strip("\r\n")
+    #pos_aa_all=get_pos_aa(vl_pos_folder,unique_cdr_fasta,l_position_list)
+    #get_same_seq_fasta(vl_pos_folder,unique_cdr_fasta,pos_aa_all,candidate_seq_pos)
+        #获取和备选序列一致的氨基酸的fasta文件
+    #seq_1="QEQLVQSGGGLVQPGGSLRLSCAASGFTFSSSAMHWVRQTSGKGLEWIGRIRSKSNNYATEYAASVKGRFTMSRDDSKNTAFLQMSSLKTEDTAVYYCFTLGRNTENRFDVWGPGVLVTVSS"
+    #seq_2="EVQLVESGGGLVQPGGFLRLSCVASGFTFSDYEMAWVRQPTGKGLEWVSSISRPGGSNTYYLDPVKGRFTISRDNAKNTLYLQMNSLRAEDTAVYYCARHVGVTAARLRVNSLDVWGRGVLVTVSL"
+    #confidence_n=get_confidence(seq_1,seq_2)
+    #print ("00000000000000000000000000000",confidence_n)
+    #if True:
+    #    pass
+        #get_matched_VJ_fasta(path_n,fasta_file,candidate_seq,chain_type)
+    
+    """
+    os.chdir(path_n)
+    #首先将序列写入文件中
+    if True:
+        #首先获取备选序列的胚系基因的类型
+        candidate_file=open("candidate_seq.fasta","w")
+        candidate_file.write(">"+"candidate_seq"+"\n"+candidate_seq)
+        #candidate_file.write(">"+"candidate_seq"+"\n"+candidate_seq+"\n"+">"+"candidate_seq"+"\n"+candidate_seq+"\n"+">"+"candidate_seq"+"\n"+candidate_seq+"\n"+">"+"candidate_seq"+"\n"+candidate_seq+"\n"+">"+"candidate_seq"+"\n"+candidate_seq+"\n")
+        candidate_file.close()
+        #分别获取V和J的胚系基因的类型
+        divide_V_J(path_n,"candidate_seq.fasta")
+        #首先获取备选序列的胚系基因的类型
+        record_id_freq(species_n,path_n,fasta_file,"candidate_seq_v_gene.fasta","V")
+        record_id_freq(species_n,path_n,fasta_file,"candidate_seq_j_gene.fasta","J")
+        cand_v_germ=""
+        cand_j_germ=""
+        print ("xxxxxxxxxxxxxxxxxxxxxxxxxxx")
+        with open("candidate_seq_v_gene_germline_freq.txt","r") as content:
+            cand_v_germ=content.readlines()[3].split("\t")[0]
+        with open("candidate_seq_j_gene_germline_freq.txt","r") as content:
+            cand_j_germ=content.readlines()[3].split("\t")[0]
+        print (cand_v_germ,cand_j_germ)
+        header=os.path.splitext(fasta_file)[0]
+        #首先区分V基因和J基因
+        divide_V_J(path_n,fasta_file)
+        #接下来对V基因和J基因分别进行blast分析
+        j_fasta="%s_j_gene.fasta"%header
+        v_fasta="%s_v_gene.fasta"%header
+        record_id_freq(species_n,path_n,fasta_file,v_fasta,"V",cand_v_germ)
+        #首先找出符合V区域的序列，接下来再从中找出符合J区域的序列
+        v_1st_fasta="%s_v_gene_same_germ.fasta"%header
+        divide_V_J(path_n,v_1st_fasta)
+        v_1st_remain_fasta="%s_v_gene_same_germ_j_gene.fasta"%header
+        record_id_freq(species_n,path_n,v_1st_fasta,v_1st_remain_fasta,"J",cand_j_germ)
+        #记录分析后的fasta文件的名称
+        second_fasta="%s_v_gene_same_germ_j_gene_same_germ.fasta"%header
+        cdr3_folder="%s_HCDR3_len"%header
+        if os.path.exists(cdr3_folder):
+            os.system("rm -rf %s"%cdr3_folder)
+        path_cdr3=os.path.join(path_n,cdr3_folder)
+        path_screening=os.path.join(path_cdr3,"cdr_%s_len_screening"%chain_type)
+        path_candidate_screening=os.path.join(path_cdr3,"candidate_seq")
+        os.mkdir(path_cdr3)
+        os.mkdir(path_screening)
+        os.mkdir(path_candidate_screening)
+        new_file_name="cdr_%s_len_screening.fasta"%chain_type
+        cdr_len_fasta1=os.path.join(path_n,cdr3_folder,"cdr_%s_len_screening"%chain_type,new_file_name)
+        cdr_len_fasta2=os.path.join(path_n,path_screening,new_file_name)
+        shutil.copyfile(second_fasta,cdr_len_fasta1) 
+        shutil.copy(second_fasta,path_screening)
+        shutil.copyfile("candidate_seq.fasta",os.path.join(path_candidate_screening,"candidate_%s_seq.fasta"%chain_type))
+        
+        #接下来统计CDR的长度信息
+        ###首先按照按照按照氨基酸进行分析提取CDR
+        os.chdir(cdr3_folder)
+        os.system("AA_fasta_analysis NGS --scheme KABAT")
+        #将formal_id的fasta文件拷贝到当前文件夹下
+        ####根据链的类型确定fromal_id所处的位置
+        if chain_type!="VH":
+            chain_type="VL"
+        formal_id_fasta_name="cdr_%s_len_screening_CDR_sequences_CDR3_only_edited_id.fasta"%chain_type
+        formal_id_folder=os.path.join(path_cdr3,"all_match_file",chain_type,"%s_CDR3"%chain_type,"formal_id")
+        cdr3_len=get_cdr3_len(formal_id_folder,"candidate_%s_seq_CDR_sequences_CDR3_only_edited_id.fasta"%chain_type)
+        print ("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",cdr3_len)
+         #
+        shutil.copy(os.path.join(formal_id_folder,formal_id_fasta_name),path_screening)
+        screen_cdr3_len(path_screening,new_file_name,formal_id_fasta_name,cdr3_len)
+        
+        """ 
+
+
+
+
+    """     
+    elif candidate_seq and fasta_file:
+        candidate_file=open("candidate_seq","w")
+        candidate_file.write(">"+"candidate_seq"+"\n"+candidate_seq+"\n"+">"+"candidate_seq"+"\n"+candidate_seq+"\n"+">"+"candidate_seq"+"\n"+candidate_seq+"\n"+">"+"candidate_seq"+"\n"+candidate_seq+"\n"+">"+"candidate_seq"+"\n"+candidate_seq+"\n")
+        candidate_file.close()
+      
+        #首先获取备选序列的胚系基因的类型
+        record_id_freq(species_n,path_n,"candidate_seq")
+        cand_germ=""
+        with open("candidate_seq_germline_freq.txt","r") as content:
+            cand_germ=content.readlines()[3].split("\t")[0]
+        print ("ssssssssssssssssssssssssssssssssssssssssssss",cand_germ)
+        record_id_freq(species_n,path_n,fasta_file,"V",cand_germ)
+        
+            
+    else:
+        files_all=os.listdir(path_n)
+        for file_n in files_all:
+            if file_n.endswith(".fasta"):
+                record_id_freq(species_n,path_n,file_n)
+    
+   """
