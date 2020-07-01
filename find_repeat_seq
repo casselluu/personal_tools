@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!/usr/bin/env python
 #coding=utf-8
 """
 这个程序的功能是通过给定的两个文件找出两个之间两者之间不同的序列
@@ -72,7 +72,7 @@ def find_repeat_seq(path_n,all_cdr_file,all_seq_file):
     i=0
     for seq_n,info_n in dict_all_seq.items():
         #print (seq_n)
-        if  old_seq_dict.has_key(seq_n):
+        if  old_seq_dict.get(seq_n):
             #print ("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
             i+=1
             #获取原来的id
@@ -81,7 +81,7 @@ def find_repeat_seq(path_n,all_cdr_file,all_seq_file):
     k=0
     for seq_n,info_n in dict_all_cdr.items():
         #print (seq_n)
-        if  old_cdr_dict.has_key(seq_n):
+        if  old_cdr_dict.get(seq_n):
             #print ("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy")
             k+=1
             #print (k)

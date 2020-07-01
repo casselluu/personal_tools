@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!/usr/bin/env python
 #coding=utf-8
 import os
 import argparse
@@ -16,21 +16,21 @@ def sort_excel(path_n,file_n):
     #读取文件，将文件中所有的行储存在列表中
     with open(file_n,"r") as content:
         total_lines=content.readlines()
-        print total_lines
+        print (total_lines)
         header=total_lines[0]
-        print header
+        print (header)
         all_lines=total_lines[1:-1]
         last=total_lines[-1]
-        print last
+        print (last)
         #对每一行进行遍历，获取其中的CDR3长度的信息，并且储存在预定义的列表中
         for line_n in all_lines:
-            print line_n
+            #print line_n
             len_cdr3=len(line_n.split("\t")[2].split(" ")[-1])
             #len_CDR3=len(list_n)
             processed_info.append((line_n,len_cdr3))
     #对列表进行排序
     processed_info.sort(key=lambda x:int(x[-1]))
-    print processed_info
+    #print processed_info
     #预定义新文件，用来储存所有的排序后的信息
     file_name=os.path.splitext(file_n)[0]+"_sorted"+os.path.splitext(file_n)[1]
     new_file=open(file_name,"w")
