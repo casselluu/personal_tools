@@ -53,6 +53,8 @@ if __name__=="__main__":
     parser.add_argument("-f","--file",type=str,help="specify the file containing the CDR excel info")
     all_args=parser.parse_args()
     path_n=all_args.path
+    if path_n==".":
+        path_n=os.getcwd()
     file_n=all_args.file
     sort_excel(path_n,file_n)
 

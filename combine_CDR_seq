@@ -1,0 +1,92 @@
+#!/usr/local/bin/python
+#coding=utf-8
+
+"""
+这个程序的主要功能是通过给定的一代测序结果的文件夹，新建一个文件，该文件中同时含有CDR序列，氨基酸的全序列，以及ID的重复次数
+"""
+import os,argparse
+#定义一个function，该function 的功能是通过给定的CDR，seq文件将其中的内容合并
+#输入参数：结果文件夹（根据结果文件夹的名称可以直接推断文件的名称）
+#输出结果：新的文件，内容合并CDR，seq的序列
+def combine_cdr_seq(path_n,cdr_file,seq_file):
+    os.chdir(path_n)
+    #首先根据CDR的文件名称新建一个文件
+    header=os.path.splitext(cdr_file)[0]
+    combine_file_name="%s_combine_seq.txt"%header
+    combine_file=open(combine_file_name,"w")
+    combine_file.write("IDs"+"\t"+"Folders"+"\t"+"repeat_num"+"\t"+"Amini_acid_sequences(CDR)"+"\t"+"Amini_acid_sequences(VH_VL)"+"\t"+"DNA_sequences"+"\t"+"Repeated_ids"+"\n")
+    #接下来读取全序列的文件,并且转化为字典,键为id，值为全序列
+    dict_seq={}
+    with open(seq_file,"r") as content:
+        all_lines=content.readlines()[1:-1]
+        for line_n in all_lines:
+            id_n,folder_n,seq_n,DNA_n,ids_n=line_n.split("\t")
+            dict_seq[id_n]=seq_n
+    #接下来打开CDR文件，获取其中的信息，为氨基酸加上空格（DNA已经在hmmer_parser中修改，中间是空格）
+    #首先定义一个字典用来储存最后的结果（字典更加便于排序）
+    final_dict={}
+    with open(cdr_file,"r") as content:
+        print(cdr_file,"ccccccccccccccccccccc")
+        all_lines_total=content.readlines()[1:]
+        print(all_lines_total)
+        
+        if len(all_lines_total)>1:
+            line_num=all_lines_total[-1]
+            all_lines=all_lines_total[:-1]
+            for line_n in all_lines:
+                id_n,folder_n,CDR_n,DNA_n,ids_n=line_n.split("\t")
+                #去除ID的后边的换行符
+                ids_n=ids_n.strip("\r\n")
+                #计算ID的数量
+                num_id=len(ids_n.split("  "))
+                #通过ID获取全序列的序列信息(通过DNA来获取氨基酸的长度)
+                l_dna,h_dna=DNA_n.split("  ")
+                len_l_DNA=len(l_dna)
+                len_h_DNA=len(h_dna)
+                len_l_aa=len_l_DNA/3
+                len_h_aa=len_h_DNA/3
+                all_seq=dict_seq[id_n]
+                aa_seq_final=all_seq[:len_l_aa]+"  "+all_seq[-len_h_aa:]
+                #将获取到的信息放到文件中
+                final_dict[id_n]=[str(num_id),folder_n,CDR_n,aa_seq_final,DNA_n,ids_n]
+        else:
+            print("CDR结果文件中没有序列，请检查%s"%cdr_file)
+
+            #combine_file.write(id_n+"\t"+str(num_id)+"\t"+folder_n+"\t"+CDR_n+"\t"+aa_seq_final+"\t"+DNA_n+"\t"+ids_n+"\n")
+    sorted_final_info=sorted(final_dict.items(),key=lambda x:int(x[1][0]),reverse=True)
+    for id_n,info_n in sorted_final_info:
+        combine_file.write(id_n+"\t"+"\t".join(info_n)+"\n")
+    combine_file.write(line_num)
+    combine_file.close()
+        
+
+
+if __name__=="__main__":
+    parser=argparse.ArgumentParser()
+    parser.add_argument("-p","--path",type=str,default=".",help="specify the file to the result folder")
+    parser.add_argument("-c","--CDR",type=str,default=None,help="specify the CDR output file")
+    parser.add_argument("-s","--seq",type=str,default=None,help="specify the sequence file")
+    
+
+
+    #解析参数
+    all_args=parser.parse_args()
+    path_n=all_args.path
+    if path_n==".":
+        path_n=os.getcwd()
+    cdr_file=all_args.CDR
+    seq_file=all_args.seq
+    #假如没有指定cdr文件。那么就用文件夹来获取其文件名称
+    if not cdr_file:
+        folder_name=os.path.split(path_n)[-1]
+        #根据文件夹的名称获取文件的名称
+        cdr_file="%s_CDR_info.txt"%folder_name
+        
+    #假如没有指定全序列的文件，那么就用文件夹来获取其名称
+    if not seq_file:
+       folder_name=os.path.split(path_n)[-1]
+       #根据文件夹名称获取文件名称
+       seq_file="%s_seq_info.txt"%folder_name
+    #最后进行分析
+    
+    combine_cdr_seq(path_n,cdr_file,seq_file)        

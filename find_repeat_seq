@@ -1,0 +1,118 @@
+#!/usr/local/bin/python
+#coding=utf-8
+"""
+这个程序的功能是通过给定的两个文件找出两个之间两者之间不同的序列
+程序应用情景：一代测序分析找出新序列之后，仍然想要与之前重复的序列，那么这个程序就负责找出与之前重复的序列
+"""
+import argparse,os
+#定义一个funtion，该function的功能是通过给定的两个一代测序输出的excel信息的文件，将这个文件转化为字典，字典的键为id，值为全部的该行全部的信息
+#输入参数：文件所在的路径，文件的名称
+#输出结果：返回一个字典
+def excel2dict(path_n,file_n):
+    os.chdir(path_n)
+    dict_info={}
+    with open(file_n,"r") as content:
+        all_lines=content.readlines()
+        header_line=all_lines[0]
+        all_lines=all_lines[1:-1]
+        for line_n in all_lines:
+            seq_n=line_n.split("\t")[2]
+            
+            dict_info[seq_n]=line_n
+     
+    return dict_info,header_line
+
+#定义一个function,该function的功能是通过给定的两个文件（一个是所有的序列文件，一个是unique的序列文件），找出剔除新出现序列之后的所有的文件
+#输入参数:文件所在的路径，全部序列文件，新出现序列文件
+#输出结果:新建一个文件，改文件中将会储存所有两个文件之间不同序列
+def find_repeat_seq(path_n,all_cdr_file,all_seq_file):
+    os.chdir(path_n)
+    #将所有的文件转化为字典的形势，并且获取它的header信息
+    path_combined_data=os.path.join(path_n,"old_files")
+    #print (path_combined_data)
+    os.chdir(path_combined_data)
+    #打开合并后的CDR序列和全序列并且转化为字典
+    old_cdr_dict={}
+    old_seq_dict={}
+    with open("combined_all_file_with_CDR_info.txt","r") as content:
+        all_lines=content.readlines()[1:]
+        for line_n in all_lines:
+            cdr_6=line_n.split("\t")[2]
+            id_n=line_n.split("\t")[0]
+            if not old_cdr_dict.get(cdr_6):
+                old_cdr_dict[cdr_6]=id_n
+            else:
+                old_cdr_dict[cdr_6]="   ".join([id_n,old_cdr_dict[cdr_6]])
+    with open("combined_all_file_with_seq_info.txt","r") as content:
+        all_lines=content.readlines()[1:]
+        for line_n in all_lines:
+            all_seq=line_n.split("\t")[2]
+            id_n=line_n.split("\t")[0]
+            if not old_seq_dict.get(all_seq):
+                old_seq_dict[all_seq]=id_n
+            else:
+                old_seq_dict[all_seq]="   ".join([id_n,old_seq_dict[all_seq]])
+        
+    dict_all_seq,header_line_seq=excel2dict(path_n,all_seq_file)
+    dict_all_cdr,header_line_cdr=excel2dict(path_n,all_cdr_file)
+    #dict_unique_seq,header_line_unique=excel2dict(path_n,unique_seq_file)
+    #定义一个新的文件，用来储存两者之间不同的序列
+    ##首先获取全部序列文件名
+    header_seq=os.path.splitext(all_seq_file)[0]
+    header_cdr=os.path.splitext(all_cdr_file)[0]
+    new_file_cdr=open(header_cdr+"_repeat_seq.txt","w")
+    new_file_seq=open(header_seq+"_repeat_seq.txt","w")
+    new_file_seq.write("old_id"+"\t"+header_line_seq)
+    new_file_cdr.write("old_id"+"\t"+header_line_cdr)
+    #利用for循环找出两者之间相同的键
+    #print("mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",old_cdr_dict)
+    #print("nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",old_seq_dict)
+    #print ("00000000000000000000000000000000000000000000",dict_all_seq)
+    #print ("pppppppppppppppppppppppppppppppppppppppppppppp",dict_all_cdr)
+    i=0
+    for seq_n,info_n in dict_all_seq.items():
+        #print (seq_n)
+        if  old_seq_dict.has_key(seq_n):
+            #print ("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+            i+=1
+            #获取原来的id
+            id_x=old_seq_dict[seq_n].split("\t")[0]
+            new_file_seq.write(id_x+"\t"+info_n)
+    k=0
+    for seq_n,info_n in dict_all_cdr.items():
+        #print (seq_n)
+        if  old_cdr_dict.has_key(seq_n):
+            #print ("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy")
+            k+=1
+            #print (k)
+            id_x=old_cdr_dict[seq_n].split("\t")[0]
+            new_file_cdr.write(id_x+"\t"+info_n)
+    new_file_seq.write(str(i))
+    new_file_seq.close()
+    new_file_cdr.write(str(k))
+    new_file_cdr.close()
+if __name__=="__main__":
+    parser=argparse.ArgumentParser()
+    parser.add_argument("-p","--path",type=str,default=".",help="specify the path to the files")
+    parser.add_argument("-f1","--file1",type=str,default=None,help="specify the file containing all_seq")
+    parser.add_argument("-f2","--file2",type=str,default=None,help="specifu the file containing all_cdr")
+    all_args=parser.parse_args()
+    path_n=all_args.path
+    if path_n==".":
+        path_n=os.getcwd()
+    file_1=all_args.file1
+    file_2=all_args.file2
+    folder_name=os.path.split(path_n)[-1]
+    if not file_1:
+        file_1=folder_name+"_CDR_info.txt"
+    if not file_2:
+        file_2=folder_name+"_seq_info.txt"
+    #print (file_1,file_2)
+    find_repeat_seq(path_n,file_1,file_2)
+
+
+
+           
+    
+    
+
